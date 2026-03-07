@@ -1,0 +1,6 @@
+sarvamai
+openai-whisper
+python-dotenv
+sounddevice
+scipy
+numpy
