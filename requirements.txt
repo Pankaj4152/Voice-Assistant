@@ -6,3 +6,4 @@ scipy
 numpy
 pvporcupine
 webrtcvad-wheels
+websockets

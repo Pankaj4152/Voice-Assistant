@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Voice Workspace HUD</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --cyan:    #00f5ff;
+    --green:   #00ff88;
+    --orange:  #ff9500;
+    --red:     #ff3b5c;
+    --bg:      rgba(10, 14, 26, 0.92);
+    --border:  rgba(0, 245, 255, 0.25);
+    --mono:    'Share Tech Mono', monospace;
+    --display: 'Rajdhani', sans-serif;
+  }
+
+  body {
+    background: transparent;
+    -webkit-app-region: drag;
+    user-select: none;
+    overflow: hidden;
+    width: 320px;
+    height: 160px;
+  }
+
+  .hud {
+    width: 320px;
+    height: 160px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 14px;
+    gap: 8px;
+
+    /* Corner cuts — cyberpunk style */
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  }
+
+  /* Animated top accent line */
+  .hud::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: scanline 3s ease-in-out infinite;
+  }
+
+  @keyframes scanline {
+    0%, 100% { opacity: 0.3; transform: scaleX(0.3); }
+    50%       { opacity: 1;   transform: scaleX(1); }
+  }
+
+  /* ── Header row ─────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    -webkit-app-region: drag;
+  }
+
+  .brand {
+    font-family: var(--display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+
+  .conn-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+  }
+  .conn-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  /* ── Status row ─────────────────────────────── */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mic-icon {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 16px;
+    flex-shrink: 0;
+    transition: border-color 0.2s, background 0.2s;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  }
+
+  .mic-icon.idle       { border-color: rgba(0,245,255,0.2); }
+  .mic-icon.listening  { border-color: var(--cyan);  background: rgba(0,245,255,0.08); animation: pulse-cyan 1s ease-in-out infinite; }
+  .mic-icon.wake       { border-color: var(--green); background: rgba(0,255,136,0.08); animation: pulse-green 0.6s ease-in-out infinite; }
+  .mic-icon.processing { border-color: var(--orange); background: rgba(255,149,0,0.08); animation: spin-border 1s linear infinite; }
+  .mic-icon.error      { border-color: var(--red); background: rgba(255,59,92,0.08); }
+
+  @keyframes pulse-cyan  { 0%,100%{ box-shadow: 0 0 0 0 rgba(0,245,255,0.4); } 50%{ box-shadow: 0 0 0 6px rgba(0,245,255,0); } }
+  @keyframes pulse-green { 0%,100%{ box-shadow: 0 0 0 0 rgba(0,255,136,0.4); } 50%{ box-shadow: 0 0 0 6px rgba(0,255,136,0); } }
+  @keyframes spin-border { 0%{ filter: hue-rotate(0deg); } 100%{ filter: hue-rotate(360deg); } }
+
+  .status-info { flex: 1; min-width: 0; }
+
+  .state-label {
+    font-family: var(--display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-bottom: 3px;
+    transition: color 0.2s;
+  }
+
+  .state-label.idle       { color: rgba(255,255,255,0.4); }
+  .state-label.listening  { color: var(--cyan); }
+  .state-label.wake       { color: var(--green); }
+  .state-label.processing { color: var(--orange); }
+  .state-label.error      { color: var(--red); }
+
+  .state-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ── Waveform bars ──────────────────────────── */
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 24px;
+  }
+
+  .bar {
+    width: 3px;
+    background: var(--cyan);
+    border-radius: 2px;
+    opacity: 0.3;
+    height: 4px;
+    transition: height 0.1s, opacity 0.2s;
+  }
+
+  .waveform.active .bar {
+    opacity: 0.8;
+    animation: wave 0.8s ease-in-out infinite;
+  }
+
+  .bar:nth-child(1)  { animation-delay: 0.0s; }
+  .bar:nth-child(2)  { animation-delay: 0.1s; }
+  .bar:nth-child(3)  { animation-delay: 0.2s; }
+  .bar:nth-child(4)  { animation-delay: 0.15s; }
+  .bar:nth-child(5)  { animation-delay: 0.05s; }
+  .bar:nth-child(6)  { animation-delay: 0.25s; }
+  .bar:nth-child(7)  { animation-delay: 0.1s; }
+  .bar:nth-child(8)  { animation-delay: 0.2s; }
+
+  @keyframes wave {
+    0%, 100% { height: 3px; }
+    50%       { height: 20px; }
+  }
+
+  /* ── Transcript ─────────────────────────────── */
+  .transcript-wrap {
+    border-top: 1px solid rgba(0,245,255,0.1);
+    padding-top: 8px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .transcript {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.02em;
+  }
+
+  .transcript .label {
+    color: var(--cyan);
+    opacity: 0.6;
+    margin-right: 4px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+
+  .transcript.flash {
+    animation: flash-in 0.3s ease-out;
+  }
+
+  @keyframes flash-in {
+    0%   { color: var(--green); }
+    100% { color: rgba(255,255,255,0.75); }
+  }
+
+  /* ── Latency badge ──────────────────────────── */
+  .latency {
+    position: absolute;
+    bottom: 10px; right: 12px;
+    font-family: var(--mono);
+    font-size: 8px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+<div class="hud" id="hud">
+  <!-- Header -->
+  <div class="header">
+    <span class="brand">Voice Workspace</span>
+    <div class="conn-dot" id="connDot"></div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-row">
+    <div class="mic-icon idle" id="micIcon">🎙</div>
+    <div class="status-info">
+      <div class="state-label idle" id="stateLabel">IDLE</div>
+      <div class="state-sub" id="stateSub">Say "Hey Workspace" to begin</div>
+    </div>
+    <div class="waveform" id="waveform">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+    </div>
+  </div>
+
+  <!-- Transcript -->
+  <div class="transcript-wrap">
+    <div class="transcript" id="transcript">
+      <span class="label">LAST ›</span>
+      <span id="transcriptText">—</span>
+    </div>
+  </div>
+
+  <!-- Latency -->
+  <div class="latency" id="latency">— ms</div>
+</div>
+
+<script>
+  const { ipcRenderer } = require('electron');
+
+  const micIcon    = document.getElementById('micIcon');
+  const stateLabel = document.getElementById('stateLabel');
+  const stateSub   = document.getElementById('stateSub');
+  const waveform   = document.getElementById('waveform');
+  const transcript = document.getElementById('transcript');
+  const transcriptText = document.getElementById('transcriptText');
+  const connDot    = document.getElementById('connDot');
+  const latencyEl  = document.getElementById('latency');
+
+  const STATES = {
+    idle:       { label: 'IDLE',       sub: 'Say "Hey Workspace" to begin', icon: '🎙', wave: false },
+    listening:  { label: 'LISTENING',  sub: 'VAD active — detecting speech', icon: '🎙', wave: true  },
+    wake:       { label: 'WAKE WORD',  sub: 'Triggered! Speak your command', icon: '🔔', wave: true  },
+    processing: { label: 'PROCESSING', sub: 'Transcribing + routing intent',  icon: '⚡', wave: false },
+    executing:  { label: 'EXECUTING',  sub: 'Running action...',              icon: '▶', wave: false },
+    done:       { label: 'DONE',       sub: 'Command complete',               icon: '✓', wave: false },
+    error:      { label: 'ERROR',      sub: 'Something went wrong',           icon: '✗', wave: false },
+  };
+
+  function setState(state) {
+    const s = STATES[state] || STATES.idle;
+    const cls = state === 'done' ? 'listening' : state; // done uses green style
+
+    micIcon.className    = `mic-icon ${state}`;
+    micIcon.textContent  = s.icon;
+    stateLabel.className = `state-label ${cls}`;
+    stateLabel.textContent = s.label;
+    stateSub.textContent = s.sub;
+
+    if (s.wave) waveform.classList.add('active');
+    else        waveform.classList.remove('active');
+  }
+
+  function setTranscript(text) {
+    transcriptText.textContent = text;
+    transcript.classList.remove('flash');
+    void transcript.offsetWidth; // reflow
+    transcript.classList.add('flash');
+  }
+
+  // ── IPC from main process ─────────────────────
+  ipcRenderer.on('connection-status', (_, { connected }) => {
+    connDot.classList.toggle('connected', connected);
+    if (!connected) setState('idle');
+  });
+
+  ipcRenderer.on('pipeline-event', (_, msg) => {
+    switch (msg.type) {
+      case 'state':
+        setState(msg.state);
+        break;
+      case 'transcript':
+        setTranscript(msg.text);
+        setState('done');
+        setTimeout(() => setState('idle'), 2000);
+        break;
+      case 'latency':
+        latencyEl.textContent = `${msg.ms}ms`;
+        break;
+      case 'error':
+        setState('error');
+        stateSub.textContent = msg.message || 'Unknown error';
+        setTimeout(() => setState('idle'), 3000);
+        break;
+    }
+  });
+
+  // Init
+  setState('idle');
+</script>
+</body>
+</html>
