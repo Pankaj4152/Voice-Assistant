@@ -133,18 +133,21 @@ class IntentParser:
         e: dict = {}
 
         action_map = {
-            "open":      r"\b(open|go to|navigate|visit)\b",
-            "search":    r"\bsearch\b",
-            "click":     r"\b(click|press|tap)\b",
-            "scroll":    r"\bscroll\b",
-            "fill_form": r"\b(fill|enter|type)\b.*(field|form|input)\b",
-            "back":      r"\bgo back\b",
-            "forward":   r"\bgo forward\b",
-            "refresh":   r"\b(refresh|reload)\b",
             "new_tab":   r"\bnew tab\b",
             "close_tab": r"\bclose tab\b",
+            "next_tab":  r"\bnext tab\b",
+            "prev_tab":  r"\b(previous tab|prev tab)\b",
+            "refresh":   r"\b(refresh|reload)\b|\brefresh page\b",
+            "back":      r"\bgo back\b|\bback\b",
+            "forward":   r"\bgo forward\b|\bforward\b",
+            "scroll":    r"\bscroll\b",
+            "read_selection": r"\bread selection\b|\bread selected\b",
             "read_page": r"\bread\b.*(page|article|content)\b",
             "download":  r"\bdownload\b",
+            "search":    r"\bsearch\b",
+            "open":      r"\b(open|go to|navigate|visit)\b",
+            "click":     r"\b(click|press|tap)\b",
+            "fill_form": r"\b(fill|enter|type)\b.*(field|form|input)\b",
         }
         for action, pattern in action_map.items():
             if re.search(pattern, t):
@@ -154,6 +157,22 @@ class IntentParser:
         # URL
         if m := re.search(r"(https?://\S+|www\.\S+|\b\w+\.(com|org|net|io|in)\b)", t):
             e["url"] = m.group(0)
+        elif e.get("action") == "open":
+            # Common site shortcuts (when user says just "youtube", "google", etc.)
+            if "youtube" in t:
+                e["url"] = "https://www.youtube.com"
+            elif "google" in t:
+                e["url"] = "https://www.google.com"
+            elif "gmail" in t:
+                e["url"] = "https://mail.google.com"
+            elif "facebook" in t:
+                e["url"] = "https://www.facebook.com"
+            elif "instagram" in t:
+                e["url"] = "https://www.instagram.com"
+
+        # Browser hint: "on chrome/edge/firefox"
+        if m := re.search(r"\b(on|in)\s+(chrome|edge|firefox)\b", t):
+            e["browser"] = m.group(2)
 
         # Search query
         if m := re.search(r"\bsearch\b\s+(?:for\s+)?(.+?)(\s+on\s+\w+|$)", text, re.IGNORECASE):
@@ -178,6 +197,108 @@ class IntentParser:
     def _os(self, text: str) -> dict:
         t = text.lower()
         e: dict = {}
+
+        # Special multi-window / global actions first
+        if re.search(r"\bminimi[sz]e\b.*\ball\b|\bminimi[sz]e all\b", t):
+            e["action"] = "minimize_all"
+            return e
+        if re.search(r"\bclose\b.*\ball\b.*\b(apps?|applications?|windows?)\b|\bclose all\b", t):
+            e["action"] = "close_all_apps"
+            return e
+
+        # Timer / stopwatch
+        if "timer" in t:
+            if re.search(r"\b(stop|cancel|clear)\b.*\btimer\b|\bstop timer\b|\bcancel timer\b", t):
+                e["action"] = "timer_cancel"
+                return e
+            e["action"] = "timer_set"
+            if m := re.search(r"\bfor\s+(\d+)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b", t):
+                e["duration"] = int(m.group(1))
+                unit = m.group(2)
+                if unit.startswith(("sec", "s")):
+                    e["unit"] = "seconds"
+                elif unit.startswith(("min", "m")):
+                    e["unit"] = "minutes"
+                else:
+                    e["unit"] = "hours"
+            return e
+
+        if "stopwatch" in t:
+            if re.search(r"\b(start|begin|launch)\b.*\bstopwatch\b|\bstart stopwatch\b", t):
+                e["action"] = "stopwatch_start"
+            elif re.search(r"\b(stop|end)\b.*\bstopwatch\b|\bstop stopwatch\b", t):
+                e["action"] = "stopwatch_stop"
+            elif re.search(r"\b(reset|clear)\b.*\bstopwatch\b|\breset stopwatch\b", t):
+                e["action"] = "stopwatch_reset"
+            else:
+                e["action"] = "stopwatch_start"
+            return e
+
+        # Music (kept in OS so it doesn't route to AI)
+        if re.search(r"\bplay\b", t):
+            if m := re.search(r"\bplay\b\s+(.+?)(\s+on\s+(spotify|youtube)|$)", t):
+                name = m.group(1).strip()
+                if name in ("music", "some music", "random music"):
+                    name = ""
+                e["action"] = "music_play"
+                e["name"] = name
+                if m.group(3):
+                    e["platform"] = m.group(3)
+                return e
+
+        # Volume / brightness normalization (percent + synonyms)
+        if re.search(r"\b(unmute|sound on|speaker on)\b", t):
+            e["action"] = "unmute"
+            e["target"] = "volume"
+            return e
+        if re.search(r"\b(mute|silence|sound off|speaker off)\b", t):
+            e["action"] = "mute"
+            e["target"] = "volume"
+            return e
+
+        if "volume" in t or "sound" in t or "speaker" in t:
+            e["target"] = "volume"
+            if m := re.search(r"(\d{1,3})\s*%?", t):
+                v = max(0, min(int(m.group(1)), 100))
+                e["action"] = "set"
+                e["value"] = v
+                return e
+            if re.search(r"\b(max|maximum|full|high|loud)\b", t):
+                e["action"] = "set"
+                e["value"] = 100
+                return e
+            if re.search(r"\b(low|quiet|soft)\b", t):
+                e["action"] = "set"
+                e["value"] = 20
+                return e
+            if re.search(r"\b(up|increase|raise|turn up)\b", t):
+                e["action"] = "increase"
+                return e
+            if re.search(r"\b(down|decrease|lower|turn down)\b", t):
+                e["action"] = "decrease"
+                return e
+
+        if "brightness" in t or re.search(r"\b(dim|bright(en)?|dimmer|brighter)\b", t):
+            e["target"] = "brightness"
+            if m := re.search(r"(\d{1,3})\s*%?", t):
+                v = max(0, min(int(m.group(1)), 100))
+                e["action"] = "set"
+                e["value"] = v
+                return e
+            if re.search(r"\b(max|maximum|full|high|bright)\b", t):
+                e["action"] = "set"
+                e["value"] = 100
+                return e
+            if re.search(r"\b(low|dim|dark)\b", t):
+                e["action"] = "set"
+                e["value"] = 20
+                return e
+            if re.search(r"\b(up|increase|raise|brighter)\b", t):
+                e["action"] = "increase"
+                return e
+            if re.search(r"\b(down|decrease|lower|dim|dimmer)\b", t):
+                e["action"] = "decrease"
+                return e
 
         action_map = {
             "launch":     r"\b(open|launch|start|run)\b",
@@ -204,17 +325,22 @@ class IntentParser:
                 e["action"] = action
                 break
 
-        # App name
+        # App name (common cases + "open <app>" capture)
         known_apps = [
-            "notepad", "vscode", "vs code", "calculator", "chrome",
-            "firefox", "terminal", "explorer", "file manager", "task manager",
-            "settings", "word", "excel", "powerpoint", "vlc",
-            "spotify", "zoom", "slack", "teams", "discord", "paint",
+            "camera", "calculator", "calc", "notepad", "chrome", "edge", "firefox",
+            "terminal", "cmd", "powershell", "explorer", "settings", "task manager",
+            "vscode", "vs code", "word", "excel", "powerpoint", "paint", "vlc",
+            "spotify", "zoom", "slack", "teams", "discord",
         ]
         for app in known_apps:
             if app in t:
                 e["app"] = app
                 break
+        if "app" not in e:
+            if m := re.search(r"\b(open|launch|start|run|close|quit|exit)\b\s+(.+?)(\s+(app|application|program|window)|$)", t):
+                candidate = m.group(2).strip()
+                if candidate:
+                    e["app"] = candidate
 
         # Numeric value e.g. "volume to 70"
         if m := re.search(r"\bto\s+(\d+)\b", t):

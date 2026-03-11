@@ -7,3 +7,8 @@ numpy
 pvporcupine
 webrtcvad-wheels
 websockets
+pyautogui
+pygetwindow
+pyttsx3
+requests
+beautifulsoup4

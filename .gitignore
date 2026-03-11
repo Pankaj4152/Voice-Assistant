@@ -208,3 +208,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+
+##
+suggestion.txt
+# my_main.py
+voice/test.py
+

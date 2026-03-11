@@ -50,10 +50,12 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\b(close|quit|exit|kill)\b.*(app|window|program|tab)",
         r"\b(volume|brightness|wifi|bluetooth|sound)\b",
         r"\b(screenshot|screen capture|capture screen|print screen)\b",
+        r"\b(timer|stopwatch)\b",
+        r"\bplay\b.*\b(music|song)\b",
         r"\b(copy|paste|cut|move|delete|rename)\b.*(file|folder|directory)",
         r"\b(lock|sleep|shutdown|restart|hibernate|sign out|log off)\b",
         r"\b(increase|decrease|set|mute|unmute)\b.*(volume|brightness|sound)",
-        r"\b(minimize|maximize|restore|resize)\b.*(window)?",
+        r"\b(minimize|maximize|restore|resize)\b.*(window|all)?",
         r"\b(task manager|file manager|control panel|system settings)\b",
         r"\b(switch window|alt tab|next window)\b",
         r"\b(empty trash|recycle bin)\b",
@@ -70,7 +72,6 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\b(weather|news|headlines|temperature)\b",
         r"\b(time|date|today|tomorrow|day|month|year)\b",
         r"\b(joke|quote|fact|trivia)\b",
-        r"\b(play|pause|stop|next|previous)\b.*(song|music|video|podcast)",
     ],
 }
 
