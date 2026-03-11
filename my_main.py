@@ -84,27 +84,43 @@ class VoicePipeline:
             wav.write(f.name, self.sample_rate, (audio * 32767).astype(np.int16))
             return f.name
 
+    # Commands the assistant understands — helps Whisper context
+    _INITIAL_PROMPT = (
+        "Open chrome, open YouTube, play music, pause, stop, volume up, volume down, "
+        "set a timer, search for, close window, open settings, take screenshot, "
+        "what time is it, open notepad, open file explorer"
+    )
+
     def _transcribe_array(self, audio: np.ndarray) -> str:
         """Direct NumPy transcription (fast path)."""
         try:
-            if len(audio) < 480:
+            # Require at least 0.5s of audio — anything shorter is noise/breath
+            if len(audio) < self.sample_rate // 2:
                 print("[ASR] Audio too short, skipping...")
                 return ""
+
+            # Normalize so quiet mic doesn't kill accuracy
+            max_val = np.abs(audio).max()
+            if max_val > 0:
+                audio = audio / max_val
 
             print(f"[ASR] Transcribing {len(audio)/self.sample_rate:.1f}s audio...")
 
             result = self.asr.model.transcribe(
                 audio,
                 fp16=False,
-                language="en",           # change to "hi" or None for Hindi
+                language=None,                    # auto-detect; handles accents/Hinglish
+                temperature=0,                    # deterministic output, no hallucinations
+                condition_on_previous_text=False, # prevent hallucination loops
+                initial_prompt=self._INITIAL_PROMPT,
             )
             text = result.get("text", "").strip()
-            
+
             if text:
                 print(f"[ASR] Success: '{text}'")
             else:
                 print("[ASR] No text recognized")
-                
+
             return text
         except Exception as e:
             print(f"[ASR] Error: {e}")
@@ -117,7 +133,14 @@ class VoicePipeline:
         """
         audio_path = self._audio_to_wav(audio)
         try:
-            result = self.asr.model.transcribe(audio_path)
+            result = self.asr.model.transcribe(
+                audio_path,
+                fp16=False,
+                language=None,
+                temperature=0,
+                condition_on_previous_text=False,
+                initial_prompt=self._INITIAL_PROMPT,
+            )
             return (result.get("text", "") or "").strip()
         except Exception as e:
             print(f"[ASR] File-based transcription error: {e}")
@@ -205,8 +228,8 @@ if __name__ == "__main__":
     pipeline = VoicePipeline(
         picovoice_access_key=ACCESS_KEY,
         wake_word="jarvis",
-        whisper_model="base",
-        vad_aggressiveness=2,
+        whisper_model="small",   # base is too inaccurate; small handles accents better
+        vad_aggressiveness=1,    # 2 was too aggressive; 1 catches more speech frames
     )
 
     print("Voice Assistant ready! Say 'jarvis' + command...\n")

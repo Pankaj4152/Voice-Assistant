@@ -11,9 +11,9 @@ function createHUD() {
 
   hudWindow = new BrowserWindow({
     width: 320,
-    height: 160,
+    height: 195,
     x: width - 340,
-    y: height - 180,
+    y: height - 215,
     frame: false,
     transparent: true,
     alwaysOnTop: true,

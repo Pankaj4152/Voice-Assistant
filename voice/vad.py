@@ -13,14 +13,16 @@ class VAD:
     """
 
     def __init__(self, logger=None, sample_rate=16000, aggressiveness=2,
-                 frame_duration_ms=30, padding_duration_ms=300):
+                 frame_duration_ms=30, padding_duration_ms=500):
         """
         sample_rate: 16000Hz (WebRTC VAD requirement)
         aggressiveness: 0-3 (0 = least aggressive filtering, 3 = most aggressive)
         frame_duration_ms: 10, 20, or 30ms — WebRTC VAD requirement
-        padding_duration_ms: silence padding before cutting off speech
+        padding_duration_ms: silence padding before cutting off speech (500ms default)
 
         """
+        # Minimum voiced segment length to send to ASR (avoid transcribing noise bursts)
+        self.min_segment_samples = int(sample_rate * 0.5)  # 0.5 seconds
         self.logger = logger
         self.sample_rate = sample_rate
         self.frame_duration_ms = frame_duration_ms
@@ -79,9 +81,9 @@ class VAD:
                 if not self.triggered:
                     self.ring_buffer.append((frame, is_speech))
 
-                    # If >90% of the ring buffer is speech → start capturing
+                    # If >75% of the ring buffer is speech → start capturing
                     num_voiced = sum(1 for _, speech in self.ring_buffer if speech)
-                    if num_voiced > 0.9 * self.ring_buffer.maxlen:
+                    if num_voiced > 0.75 * self.ring_buffer.maxlen:
                         self.triggered = True
                         voiced_frames = [f for f, _ in self.ring_buffer]
                         self.ring_buffer.clear()
@@ -94,17 +96,22 @@ class VAD:
                     voiced_frames.append(frame)
                     self.ring_buffer.append((frame, is_speech))
 
-                    # If >90% of ring buffer is silence → end of utterance
+                    # If >80% of ring buffer is silence → end of utterance
                     num_unvoiced = sum(1 for _, speech in self.ring_buffer if not speech)
-                    if num_unvoiced > 0.9 * self.ring_buffer.maxlen:
+                    if num_unvoiced > 0.8 * self.ring_buffer.maxlen:
                         self.triggered = False
                         self.ring_buffer.clear()
 
                         audio_segment = np.concatenate(voiced_frames)
                         voiced_frames = []
 
+                        # Skip segments too short — likely noise, not real speech
+                        if len(audio_segment) < self.min_segment_samples:
+                            print(f"[VAD] Segment too short ({len(audio_segment)} samples), skipping")
+                            continue
+
                         if self.logger:
                             self.logger.log_event("VAD", f"Speech end — {len(audio_segment)} samples")
-                        print("[VAD] ✅ Speech segment ready")
+                        print("[VAD] Speech segment ready")
 
                         yield audio_segment  # Hand off to wake word / ASR
