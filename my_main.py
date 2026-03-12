@@ -22,12 +22,50 @@ parser = IntentParser()
 engine = ActionEngine()
 TELEMETRY = None
 
+# Global assistant mode. "normal" = wake-word + command, "dictate" = continuous writing.
+ASSISTANT_MODE = "normal"
+
+
+def set_mode(mode: str) -> None:
+    global ASSISTANT_MODE
+    ASSISTANT_MODE = mode
+    print(f"[MODE] Switched to {ASSISTANT_MODE}")
+
+
+def _is_editor_window_active() -> bool:
+    """
+    Best-effort check: only allow dictation typing when a text editor-like
+    application is focused (Notepad, Word, VS Code, etc.).
+    """
+    try:
+        import pygetwindow as gw
+
+        win = gw.getActiveWindow()
+        if not win or not win.title:
+            return False
+        title = win.title.lower()
+        editor_tokens = [
+            "notepad",
+            "word",
+            "microsoft word",
+            "visual studio code",
+            "vscode",
+            "code",
+            "editor",
+            "google docs",
+            "notion",
+        ]
+        return any(tok in title for tok in editor_tokens)
+    except Exception as e:
+        print(f"[Dictation] Could not inspect active window: {e}")
+        return False
+import pyttsx3
+tts = pyttsx3.init()
 
 def speak(text: str) -> None:
     """Best-effort TTS. Falls back to console print if unavailable."""
     try:
-        import pyttsx3
-        tts = pyttsx3.init()
+        
         tts.say(text)
         tts.runAndWait()
     except Exception:
@@ -48,7 +86,7 @@ class VoicePipeline:
         whisper_model: str = "base",
         sample_rate: int = 16000,
         vad_aggressiveness: int = 1,
-        followup_window_sec: int = 20,
+        followup_window_sec: int = 6,
     ):
         self.logger = logger
         self.sample_rate = sample_rate
@@ -116,16 +154,17 @@ class VoicePipeline:
                 return ""
 
             # Normalize so quiet mic doesn't kill accuracy
-            max_val = np.abs(audio).max()
-            if max_val > 0:
-                audio = audio / max_val
-
+            # max_val = np.abs(audio).max()
+            # if max_val > 0:
+            #     audio = audio / max_val
+            audio = np.clip(audio, -1.0, 1.0)
+            audio = audio / np.max(np.abs(audio))
             print(f"[ASR] Transcribing {len(audio)/self.sample_rate:.1f}s audio...")
 
             result = self.asr.model.transcribe(
                 audio,
                 fp16=False,
-                language=None,                    # auto-detect; handles accents/Hinglish
+                language="en",                    # auto-detect; handles accents/Hinglish
                 temperature=0,                    # deterministic output, no hallucinations
                 condition_on_previous_text=False, # prevent hallucination loops
                 initial_prompt=self._INITIAL_PROMPT,
@@ -192,8 +231,41 @@ class VoicePipeline:
             self.logger.log_event("Pipeline", "Run loop started")
 
         try:
+            global ASSISTANT_MODE
             for audio_chunk in self.vad.listen():
                 now = time.time()
+
+                # ── Dictation mode: continuous speech-to-text typing ───────────
+                if ASSISTANT_MODE == "dictate":
+                    text = self.transcribe(audio_chunk)
+                    if not text:
+                        continue
+
+                    lowered = text.lower().strip()
+                    # Treat short utterances like "end" / "and" as stop signal.
+                    words = lowered.split()
+                    if len(words) <= 3 and re.search(r"\bend\b", lowered):
+                        ASSISTANT_MODE = "normal"
+                        print("[Dictation] Stop keyword detected → back to wake-word mode.")
+                        speak("Stopped writing. I'm back to wake word mode.")
+                        continue
+
+                    if not _is_editor_window_active():
+                        print("[Dictation] Active window is not a text editor; skipping typing.")
+                        speak("I only write into editor apps like Notepad or Word. Please focus an editor window or say stop dictation.")
+                        continue
+
+                    print(f"[Dictation] Typing: '{text}'")
+                    try:
+                        import pyautogui
+
+                        pyautogui.typewrite(text + " ")
+                    except Exception as e:
+                        print(f"[Dictation] Typing failed: {e}")
+                        speak("I couldn't type that text.")
+                    continue
+
+                # ── Normal mode: wake word → single command ────────────────────
                 if not self._listening_for_command:
                     # If we're still in follow-up command mode, skip wake word.
                     if now < self._command_mode_until:
@@ -210,7 +282,7 @@ class VoicePipeline:
 
                     if text:
                         print(f"[Pipeline] 📝 Recognized: '{text}'")
-                        
+
                         if on_command:
                             on_command(text)
                         else:
@@ -287,6 +359,13 @@ def handle_command(text: str):
 
         print("[ACTION RESULT]", action_result)
         speak((action_result or {}).get("response_text") or "Done.")
+
+        # Some actions (like dictation) can request a mode change for the main loop.
+        mode_change = (action_result or {}).get("dictation_mode")
+        if mode_change == "start":
+            set_mode("dictate")
+        elif mode_change == "stop":
+            set_mode("normal")
 
     except Exception as e:
         print("[ERROR] Command processing failed:", e)
