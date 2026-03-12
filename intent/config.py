@@ -14,13 +14,13 @@ load_dotenv()
 
 
 @dataclass(frozen=True)
-class OpenAIConfig:
-    """OpenAI API settings."""
-    api_key: str          = os.getenv("OPENAI_API_KEY", "")
-    model: str            = "gpt-4o-mini"   # Cheapest + fastest
-    max_tokens: int       = 10              # Intent = 1 word only
-    temperature: float    = 0.0            # Deterministic output
-    request_timeout: int  = 15             # Seconds before timeout
+class GeminiConfig:
+    """Gemini API settings."""
+    api_key: str          = os.getenv("GEMINI_API_KEY", "")
+    model: str            = "gemini-1.5-flash"  # Fast and low-cost for short classification
+    max_tokens: int       = 10                   # Intent = 1 word only
+    temperature: float    = 0.0                 # Deterministic output
+    request_timeout: int  = 15                  # Seconds before timeout
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class ClassifierConfig:
 @dataclass(frozen=True)
 class IntentConfig:
     """Top-level composed config."""
-    openai: OpenAIConfig        = field(default_factory=OpenAIConfig)
+    gemini: GeminiConfig         = field(default_factory=GeminiConfig)
     classifier: ClassifierConfig = field(default_factory=ClassifierConfig)
     debug: bool                 = False
 

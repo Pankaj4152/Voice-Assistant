@@ -7,12 +7,16 @@ These are intentionally implemented as:
 """
 
 import webbrowser
-import pyautogui
 import logging
 import subprocess
 import time
 import urllib.parse
 from typing import Dict, Any
+
+try:
+    import pyautogui
+except Exception:  # pragma: no cover - runtime dependency may be unavailable in tests
+    pyautogui = None
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +36,7 @@ class BrowserActions:
             "refresh": self._refresh,
             "new_tab": self._new_tab,
             "close_tab": self._close_tab,
+            "switch_tab": self._switch_tab,
             "next_tab": self._next_tab,
             "prev_tab": self._prev_tab,
             "scroll": self._scroll,
@@ -254,6 +259,19 @@ class BrowserActions:
             self._activate_browser(entities.get("browser"))
             pyautogui.hotkey("ctrl", "tab")
             return {"success": True, "response_text": "Next tab"}
+        except Exception:
+            return {"success": False, "response_text": "Could not switch tab"}
+
+    def _switch_tab(self, entities: Dict[str, Any]) -> Dict[str, Any]:
+
+        try:
+            self._activate_browser(entities.get("browser"))
+            tab_index = entities.get("tab_index")
+            if isinstance(tab_index, int) and 1 <= tab_index <= 9:
+                pyautogui.hotkey("ctrl", str(tab_index))
+                return {"success": True, "response_text": f"Switched to tab {tab_index}"}
+            pyautogui.hotkey("ctrl", "tab")
+            return {"success": True, "response_text": "Switched tab"}
         except Exception:
             return {"success": False, "response_text": "Could not switch tab"}
 

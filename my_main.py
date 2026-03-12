@@ -2,6 +2,7 @@
 import os
 import re
 import tempfile
+import time
 import numpy as np
 import scipy.io.wavfile as wav
 from dotenv import load_dotenv
@@ -15,9 +16,11 @@ from voice.asr import WhisperASR
 # ── Intent + Action system ─────────────────────────────────────────────
 from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
+from telemetry.logger import TelemetryLogger
 
 parser = IntentParser()
 engine = ActionEngine()
+TELEMETRY = None
 
 
 def speak(text: str) -> None:
@@ -41,10 +44,10 @@ class VoicePipeline:
         picovoice_access_key: str = "",
         wake_word: str = "jarvis",
         wake_word_path: str = None,
-        wake_sensitivity: float = 0.5,
+        wake_sensitivity: float = 0.65,
         whisper_model: str = "base",
         sample_rate: int = 16000,
-        vad_aggressiveness: int = 2,
+        vad_aggressiveness: int = 1,
         followup_window_sec: int = 20,
     ):
         self.logger = logger
@@ -77,6 +80,19 @@ class VoicePipeline:
 
         print("[Pipeline] ✅ All components ready.")
         print(f"[Pipeline] Say '{wake_word}' to activate.\n")
+        if self.logger:
+            self.logger.log_event(
+                "Pipeline",
+                "Pipeline initialized",
+                metadata={
+                    "wake_word": wake_word,
+                    "wake_sensitivity": wake_sensitivity,
+                    "whisper_model": whisper_model,
+                    "sample_rate": sample_rate,
+                    "vad_aggressiveness": vad_aggressiveness,
+                    "followup_window_sec": followup_window_sec,
+                },
+            )
 
     def _audio_to_wav(self, audio: np.ndarray) -> str:
         """Save float32 audio array to temp WAV, return file path."""
@@ -153,15 +169,31 @@ class VoicePipeline:
 
     def transcribe(self, audio: np.ndarray) -> str:
         """Try direct-array transcription first, then file-based fallback."""
+        started = time.time()
         text = self._transcribe_array(audio)
-        return text if text else self._transcribe_via_wav_file(audio)
+        if not text:
+            text = self._transcribe_via_wav_file(audio)
+
+        if self.logger:
+            self.logger.log_latency("ASR", started)
+            self.logger.log_event(
+                "ASR",
+                "Transcription completed",
+                metadata={
+                    "text_present": bool(text),
+                    "text_length": len(text or ""),
+                },
+            )
+        return text
 
     def run(self, on_command=None):
         print("[Pipeline] 🚀 Running. Press Ctrl+C to stop.\n")
+        if self.logger:
+            self.logger.log_event("Pipeline", "Run loop started")
 
         try:
             for audio_chunk in self.vad.listen():
-                now = __import__("time").time()
+                now = time.time()
                 if not self._listening_for_command:
                     # If we're still in follow-up command mode, skip wake word.
                     if now < self._command_mode_until:
@@ -169,6 +201,8 @@ class VoicePipeline:
                     else:
                         if self.wake_word.detect(audio_chunk):
                             print("[Pipeline] ✅ Wake word detected — now listening for command...")
+                            if self.logger:
+                                self.logger.log_event("Pipeline", "Wake accepted")
                             self._listening_for_command = True
                 else:
                     print("[Pipeline] 🧠 Processing command...")
@@ -183,41 +217,92 @@ class VoicePipeline:
                             print("[Pipeline] (no handler) → text ignored")
 
                     # Keep listening for follow-up commands for a short window.
-                    self._command_mode_until = __import__("time").time() + float(self._followup_window_sec)
+                    self._command_mode_until = time.time() + float(self._followup_window_sec)
                     self._listening_for_command = False
                     print(f"[Pipeline] 👂 Follow-up mode for {self._followup_window_sec}s...\n")
 
         except KeyboardInterrupt:
             print("\n[Pipeline] Stopped by user.")
+            if self.logger:
+                self.logger.log_event("Pipeline", "Run loop interrupted by user")
+
+        except Exception as e:
+            if self.logger:
+                self.logger.log_error("Pipeline", e)
+            raise
 
         finally:
             self.wake_word.cleanup()
+            if self.logger:
+                self.logger.log_event("Pipeline", "Run loop stopped")
 
 
 # ── Simple console handler for testing ───────────────────────────────────
 def handle_command(text: str):
     print("\n" + "═" * 60)
     print(f"🤖 COMMAND RECEIVED: '{text}'")
+    command_started = time.time()
+
+    if TELEMETRY:
+        TELEMETRY.log_event(
+            "Command",
+            "Command received",
+            metadata={"text": text},
+        )
 
     try:
         # ── Step 1: Intent parsing ─────────────────
+        parse_started = time.time()
         parsed = parser.parse(text)
+        if TELEMETRY:
+            TELEMETRY.log_latency("IntentParse", parse_started)
+            TELEMETRY.log_event(
+                "Intent",
+                "Intent parsed",
+                metadata={
+                    "intent": parsed.intent,
+                    "method": parsed.method.value,
+                    "confidence": parsed.confidence,
+                    "entities": parsed.entities,
+                },
+            )
+
         print(f"[INTENT] {parsed.intent} (conf: {parsed.confidence:.2f})")
         print(f"[ENTITIES] {parsed.entities}")
 
         # ── Step 2: Execute action ─────────────────
+        action_started = time.time()
         action_result = engine.execute(parsed)
+        if TELEMETRY:
+            TELEMETRY.log_latency("Action", action_started)
+            TELEMETRY.log_event(
+                "Action",
+                "Action executed",
+                metadata={
+                    "success": bool((action_result or {}).get("success", False)),
+                    "response_text": (action_result or {}).get("response_text", ""),
+                    "intent": parsed.intent,
+                },
+            )
+
         print("[ACTION RESULT]", action_result)
         speak((action_result or {}).get("response_text") or "Done.")
 
     except Exception as e:
         print("[ERROR] Command processing failed:", e)
+        if TELEMETRY:
+            TELEMETRY.log_error("Command", e)
+
+    finally:
+        if TELEMETRY:
+            TELEMETRY.log_latency("CommandTotal", command_started)
 
     print("═" * 60 + "\n")
 
 # ── Entrypoint ───────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    TELEMETRY = TelemetryLogger()
     ACCESS_KEY = os.getenv("PICOVOICE_ACCESS_KEY", "")
 
     if not ACCESS_KEY:
@@ -226,6 +311,7 @@ if __name__ == "__main__":
         exit(1)
 
     pipeline = VoicePipeline(
+        logger=TELEMETRY,
         picovoice_access_key=ACCESS_KEY,
         wake_word="jarvis",
         whisper_model="small",   # base is too inaccurate; small handles accents better
@@ -238,3 +324,5 @@ if __name__ == "__main__":
         pipeline.run(on_command=handle_command)
     except KeyboardInterrupt:
         print("\nGoodbye!")
+        if TELEMETRY:
+            TELEMETRY.log_event("Pipeline", "Application shutdown")

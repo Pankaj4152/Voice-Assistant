@@ -34,7 +34,8 @@ class PipelineServer:
         wake_word: str = "jarvis",
         whisper_model: str = "base",
         sample_rate: int = 16000,
-        vad_aggressiveness: int = 2,
+        vad_aggressiveness: int = 1,
+        wake_sensitivity: float = 0.65,
     ):
         self.host = host
         self.port = port
@@ -46,7 +47,8 @@ class PipelineServer:
         self.vad = VAD(sample_rate=sample_rate, aggressiveness=vad_aggressiveness)
         self.wake_word = WakeWordDetector(
             access_key=picovoice_access_key,
-            keyword=wake_word
+            keyword=wake_word,
+            sensitivity=wake_sensitivity
         )
         self.asr = WhisperASR(model_size=whisper_model, sample_rate=sample_rate)
 
@@ -199,6 +201,7 @@ if __name__ == "__main__":
         picovoice_access_key=ACCESS_KEY,
         wake_word="jarvis",
         whisper_model="base",
+        wake_sensitivity=0.65,
     )
 
     asyncio.run(server.start())

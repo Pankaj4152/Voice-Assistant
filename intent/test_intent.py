@@ -50,7 +50,7 @@ TEST_CASES = [
     ("Remind me to call mom at 5pm",                      "AI"),
     ("Calculate 25 percent of 400",                       "AI"),
 
-    # ── Ambiguous → OpenAI handles ────────────────────────
+    # ── Ambiguous → Gemini handles ────────────────────────
     ("Play some music",                                   None),
     ("Dim the screen a little",                           None),
 ]
@@ -97,7 +97,7 @@ def run():
     print("═" * 78)
     total = passed + failed
     print(f"\n  Results  : {passed}/{total} passed")
-    print(f"  LLM used : {llm_used} times (OpenAI called)")
+    print(f"  LLM used : {llm_used} times (Gemini called)")
     print(f"  Rule hit : {total - llm_used} times (free, instant)\n")
 
     if failed == 0:

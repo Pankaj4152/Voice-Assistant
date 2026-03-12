@@ -2,6 +2,21 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const WebSocket = require('ws');
 
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-component-update');
+app.commandLine.appendSwitch('disable-domain-reliability');
+app.commandLine.appendSwitch('disable-logging');
+app.commandLine.appendSwitch('log-level', '3');
+app.commandLine.appendSwitch(
+  'disable-features',
+  [
+    'AutofillServerCommunication',
+    'CertificateTransparencyComponentUpdater',
+    'MediaRouter',
+    'OptimizationHints'
+  ].join(',')
+);
+
 let hudWindow;
 let ws;
 let reconnectTimer;

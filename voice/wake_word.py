@@ -1,6 +1,6 @@
 import pvporcupine
 import numpy as np
-import struct
+import time
 
 
 class WakeWordDetector:
@@ -19,7 +19,8 @@ class WakeWordDetector:
 
     def __init__(self, logger=None, access_key: str = "",
                  keyword: str = "jarvis", keyword_path: str = None,
-                 sensitivity: float = 0.5):
+                 sensitivity: float = 0.65,
+                 detection_cooldown_sec: float = 0.8):
         """
         access_key:    Picovoice Console API key (free tier available)
         keyword:       Built-in keyword name (ignored if keyword_path is set)
@@ -27,6 +28,9 @@ class WakeWordDetector:
         sensitivity:   0.0–1.0 (higher = more sensitive, more false positives)
         """
         self.logger = logger
+        self._pcm_remainder = np.empty(0, dtype=np.int16)
+        self._detection_cooldown_sec = max(0.0, float(detection_cooldown_sec))
+        self._last_detection_ts = 0.0
 
         if not access_key:
             raise ValueError(
@@ -57,6 +61,56 @@ class WakeWordDetector:
         if self.logger:
             self.logger.log_event("WakeWord", f"Initialized — keyword='{keyword}'")
 
+    def _to_pcm(self, audio_chunk: np.ndarray) -> np.ndarray:
+        """Convert float/int audio into clipped int16 PCM for Porcupine."""
+        pcm = np.asarray(audio_chunk).reshape(-1)
+        if pcm.size == 0:
+            return np.empty(0, dtype=np.int16)
+
+        if np.issubdtype(pcm.dtype, np.floating):
+            pcm = np.clip(pcm, -1.0, 1.0)
+            return (pcm * 32767).astype(np.int16)
+
+        return np.clip(pcm, -32768, 32767).astype(np.int16)
+
+    def _process_pcm(self, pcm: np.ndarray) -> bool:
+        """Process all full Porcupine frames, preserving any trailing partial frame."""
+        if pcm.size == 0:
+            return False
+
+        if self._pcm_remainder.size:
+            pcm = np.concatenate((self._pcm_remainder, pcm))
+
+        usable_length = len(pcm) - (len(pcm) % self.frame_length)
+        if usable_length < self.frame_length:
+            self._pcm_remainder = pcm
+            return False
+
+        self._pcm_remainder = pcm[usable_length:]
+
+        for i in range(0, usable_length, self.frame_length):
+            frame = pcm[i:i + self.frame_length]
+            result = self.porcupine.process(frame)
+
+            if result >= 0:
+                now = time.monotonic()
+                if now - self._last_detection_ts < self._detection_cooldown_sec:
+                    continue
+
+                self._last_detection_ts = now
+                self._pcm_remainder = np.empty(0, dtype=np.int16)
+
+                if self.logger:
+                    self.logger.log_event("WakeWord", "Wake word detected!")
+                print("[WakeWord] Wake word detected!")
+                return True
+
+        return False
+
+    def reset(self):
+        """Clear buffered audio between pipeline states."""
+        self._pcm_remainder = np.empty(0, dtype=np.int16)
+
     def detect(self, audio_chunk: np.ndarray) -> bool:
         """
         Check a float32 audio chunk for the wake word.
@@ -70,21 +124,7 @@ class WakeWordDetector:
         Returns:
             True if wake word detected, False otherwise
         """
-        # Convert float32 → int16 PCM (Porcupine requirement)
-        pcm = (audio_chunk * 32767).astype(np.int16)
-
-        # Process in frame_length-sized windows
-        for i in range(0, len(pcm) - self.frame_length, self.frame_length):
-            frame = pcm[i: i + self.frame_length]
-            result = self.porcupine.process(frame)
-
-            if result >= 0:  # >= 0 means a keyword was detected (index into keywords list)
-                if self.logger:
-                    self.logger.log_event("WakeWord", "Wake word detected!")
-                print("[WakeWord] 🔔 Wake word detected!")
-                return True
-
-        return False
+        return self._process_pcm(self._to_pcm(audio_chunk))
 
     def detect_from_stream(self, stream_frame: np.ndarray) -> bool:
         """
@@ -100,19 +140,11 @@ class WakeWordDetector:
         if len(stream_frame) != self.frame_length:
             return False
 
-        pcm = (stream_frame * 32767).astype(np.int16)
-        result = self.porcupine.process(pcm)
-
-        if result >= 0:
-            if self.logger:
-                self.logger.log_event("WakeWord", "Wake word detected (stream mode)")
-            print("[WakeWord] 🔔 Wake word detected!")
-            return True
-
-        return False
+        return self._process_pcm(self._to_pcm(stream_frame))
 
     def cleanup(self):
         """Release Porcupine resources — always call this on shutdown."""
+        self.reset()
         self.porcupine.delete()
         print("[WakeWord] Cleaned up Porcupine instance.")
 

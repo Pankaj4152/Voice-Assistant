@@ -26,6 +26,7 @@ from voice.asr import WhisperASR
 # ── Intent + Action system ─────────────────────────────────────────────
 from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
+from telemetry.logger import TelemetryLogger
 
 parser = IntentParser()
 engine = ActionEngine()
@@ -53,10 +54,10 @@ class VoicePipeline:
         picovoice_access_key: str = "",
         wake_word: str = "jarvis",
         wake_word_path: str = None,
-        wake_sensitivity: float = 0.5,
+        wake_sensitivity: float = 0.65,
         whisper_model: str = "base.en",
         sample_rate: int = 16000,
-        vad_aggressiveness: int = 2,
+        vad_aggressiveness: int = 1,
         followup_window_sec: int = 20,
     ):
         self.logger = logger
@@ -185,7 +186,8 @@ class VoiceAssistantServer:
         wake_word: str = "jarvis",
         whisper_model: str = "base.en",
         sample_rate: int = 16000,
-        vad_aggressiveness: int = 2,
+        vad_aggressiveness: int = 1,
+        wake_sensitivity: float = 0.65,
     ):
         self.host = host
         self.port = port
@@ -193,15 +195,31 @@ class VoiceAssistantServer:
         self.clients: set[WebSocketServerProtocol] = set()
         self.pipeline = None
         self.loop = None  # Will be set when run_async is called
+        self.telemetry = TelemetryLogger()
 
         print("[Server] Initializing pipeline...")
 
         self.pipeline = VoicePipeline(
+            logger=self.telemetry,
             picovoice_access_key=picovoice_access_key,
             wake_word=wake_word,
+            wake_sensitivity=wake_sensitivity,
             whisper_model=whisper_model,
             sample_rate=sample_rate,
             vad_aggressiveness=vad_aggressiveness,
+        )
+
+        self.telemetry.log_event(
+            "Server",
+            "VoiceAssistantServer initialized",
+            metadata={
+                "host": host,
+                "port": port,
+                "wake_word": wake_word,
+                "wake_sensitivity": wake_sensitivity,
+                "whisper_model": whisper_model,
+                "vad_aggressiveness": vad_aggressiveness,
+            },
         )
 
         print(f"[Server] 🚀 Ready on ws://{host}:{port}")
@@ -221,10 +239,12 @@ class VoiceAssistantServer:
     async def send_state(self, state: str):
         await self.broadcast({"type": "state", "state": state})
         print(f"[Server] → state: {state}")
+        self.telemetry.log_event("State", "State update", metadata={"state": state})
 
     async def send_transcript(self, text: str):
         await self.broadcast({"type": "transcript", "text": text})
         print(f"[Server] → transcript: {text}")
+        self.telemetry.log_event("ASR", "Transcript emitted", metadata={"text": text})
 
     async def send_command(self, intent: str, entities: dict, response: str):
         await self.broadcast({
@@ -234,13 +254,20 @@ class VoiceAssistantServer:
             "response": response
         })
         print(f"[Server] → command executed: {intent}")
+        self.telemetry.log_event(
+            "Action",
+            "Command response emitted",
+            metadata={"intent": intent, "entities": entities, "response": response},
+        )
 
     async def send_latency(self, ms: int):
         await self.broadcast({"type": "latency", "ms": ms})
+        self.telemetry.log_event("Latency", "HUD latency emitted", metadata={"ms": ms})
 
     async def send_error(self, message: str):
         await self.broadcast({"type": "error", "message": message})
         print(f"[Server] → error: {message}")
+        self.telemetry.log_event("Error", "HUD error emitted", metadata={"message": message})
 
     # ── Client connection handler ─────────────────────────────────────────────
 
@@ -269,20 +296,47 @@ class VoiceAssistantServer:
         """Process a voice command: Intent → Action → Response"""
         print("\n" + "═" * 60)
         print(f"🤖 COMMAND RECEIVED: '{text}'")
+        command_started = time.time()
+        self.telemetry.log_event("Command", "Command received", metadata={"text": text})
 
         try:
             await self.send_state("processing")
             await self.send_transcript(text)   # show what was heard in the HUD
 
             # ── Step 1: Intent parsing ─────────────────
+            parse_started = time.time()
             parsed = parser.parse(text)
+            self.telemetry.log_latency("IntentParse", parse_started)
+            self.telemetry.log_event(
+                "Intent",
+                "Intent parsed",
+                metadata={
+                    "intent": parsed.intent,
+                    "method": parsed.method.value,
+                    "confidence": parsed.confidence,
+                    "entities": parsed.entities,
+                },
+            )
+
             print(f"[INTENT] {parsed.intent} (conf: {parsed.confidence:.2f})")
             print(f"[ENTITIES] {parsed.entities}")
 
             await self.send_state("executing")
 
             # ── Step 2: Execute action ─────────────────
+            action_started = time.time()
             action_result = engine.execute(parsed)
+            self.telemetry.log_latency("Action", action_started)
+            self.telemetry.log_event(
+                "Action",
+                "Action executed",
+                metadata={
+                    "intent": parsed.intent,
+                    "success": bool((action_result or {}).get("success", False)),
+                    "response_text": (action_result or {}).get("response_text", ""),
+                },
+            )
+
             print("[ACTION RESULT]", action_result)
             
             response_text = (action_result or {}).get("response_text") or "Done."
@@ -298,10 +352,12 @@ class VoiceAssistantServer:
         except Exception as e:
             error_msg = f"Command processing failed: {e}"
             print(f"[ERROR] {error_msg}")
+            self.telemetry.log_error("Command", e)
             await self.send_error(error_msg)
             await self.send_state("error")
 
         finally:
+            self.telemetry.log_latency("CommandTotal", command_started)
             await self.send_state("idle")
             print("═" * 60 + "\n")
 
@@ -331,6 +387,7 @@ class VoiceAssistantServer:
                     else:
                         if self.pipeline.wake_word.detect(audio_chunk):
                             print("[Pipeline] Wake word detected — now listening for command...")
+                            self.telemetry.log_event("WakeWord", "Wake accepted in server loop")
                             self.pipeline._listening_for_command = True
                             self._fire(self.send_state("wake"))
                 else:
@@ -384,6 +441,7 @@ class VoiceAssistantServer:
                 await pipeline_task
             except Exception as e:
                 print(f"[Server] Pipeline error: {e}")
+                self.telemetry.log_error("Pipeline", e)
 
 
 # ── Entrypoint ───────────────────────────────────────────────────────────────

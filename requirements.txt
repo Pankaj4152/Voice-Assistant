@@ -12,3 +12,4 @@ pygetwindow
 pyttsx3
 requests
 beautifulsoup4
+google-generativeai

@@ -55,10 +55,40 @@ class OSActions:
             return self.minimize_all()
         if action == "maximize":
             return self.maximize()
+        if action == "restore":
+            return self.restore()
         if action == "launch":
             return self.launch_app(entities)
+        if action == "switch_app":
+            return self.switch_to_app(entities)
         if action == "close":
             return self.close_app(entities)
+        if action == "close_window":
+            return self.close_window()
+        if action in ("switch_window", "next_window"):
+            return self.switch_window(previous=False)
+        if action == "previous_window":
+            return self.switch_window(previous=True)
+        if action == "task_view":
+            return self.task_view()
+        if action == "show_desktop":
+            return self.show_desktop()
+        if action == "new_desktop":
+            return self.new_virtual_desktop()
+        if action == "next_desktop":
+            return self.switch_virtual_desktop(next_desktop=True)
+        if action == "previous_desktop":
+            return self.switch_virtual_desktop(next_desktop=False)
+        if action == "close_desktop":
+            return self.close_virtual_desktop()
+        if action == "copy":
+            return self.clipboard_shortcut("copy")
+        if action == "paste":
+            return self.clipboard_shortcut("paste")
+        if action == "cut":
+            return self.clipboard_shortcut("cut")
+        if action == "select_all":
+            return self.clipboard_shortcut("select_all")
         if action == "close_all_apps":
             return self.close_all_apps()
         if action == "lock":
@@ -257,6 +287,116 @@ class OSActions:
             logger.error("Maximize failed: %s", e)
             return {"success": False, "response_text": "Failed to maximize window."}
 
+    def restore(self):
+        try:
+            import pygetwindow as gw
+            win = gw.getActiveWindow()
+            if win:
+                try:
+                    win.restore()
+                    return {"success": True, "response_text": "Window restored."}
+                except Exception:
+                    pass
+            import pyautogui
+            pyautogui.hotkey("win", "down")
+            return {"success": True, "response_text": "Window restored."}
+        except Exception as e:
+            logger.error("Restore failed: %s", e)
+            return {"success": False, "response_text": "Failed to restore window."}
+
+    def close_window(self):
+        try:
+            import pyautogui
+            pyautogui.hotkey("alt", "f4")
+            return {"success": True, "response_text": "Closed active window."}
+        except Exception as e:
+            logger.error("Close window failed: %s", e)
+            return {"success": False, "response_text": "Failed to close active window."}
+
+    def switch_window(self, previous: bool = False):
+        try:
+            import pyautogui
+            if previous:
+                pyautogui.hotkey("alt", "shift", "tab")
+                return {"success": True, "response_text": "Switched to previous window."}
+            pyautogui.hotkey("alt", "tab")
+            return {"success": True, "response_text": "Switched window."}
+        except Exception as e:
+            logger.error("Switch window failed: %s", e)
+            return {"success": False, "response_text": "Failed to switch window."}
+
+    def task_view(self):
+        try:
+            import pyautogui
+            pyautogui.hotkey("win", "tab")
+            return {"success": True, "response_text": "Opened task view."}
+        except Exception as e:
+            logger.error("Task view failed: %s", e)
+            return {"success": False, "response_text": "Failed to open task view."}
+
+    def show_desktop(self):
+        try:
+            import pyautogui
+            pyautogui.hotkey("win", "d")
+            return {"success": True, "response_text": "Showing desktop."}
+        except Exception as e:
+            logger.error("Show desktop failed: %s", e)
+            return {"success": False, "response_text": "Failed to show desktop."}
+
+    def new_virtual_desktop(self):
+        try:
+            import pyautogui
+            pyautogui.hotkey("win", "ctrl", "d")
+            return {"success": True, "response_text": "Opened new desktop."}
+        except Exception as e:
+            logger.error("New desktop failed: %s", e)
+            return {"success": False, "response_text": "Failed to open new desktop."}
+
+    def switch_virtual_desktop(self, next_desktop: bool = True):
+        try:
+            import pyautogui
+            if next_desktop:
+                pyautogui.hotkey("win", "ctrl", "right")
+                return {"success": True, "response_text": "Switched to next desktop."}
+            pyautogui.hotkey("win", "ctrl", "left")
+            return {"success": True, "response_text": "Switched to previous desktop."}
+        except Exception as e:
+            logger.error("Switch desktop failed: %s", e)
+            return {"success": False, "response_text": "Failed to switch desktop."}
+
+    def close_virtual_desktop(self):
+        try:
+            import pyautogui
+            pyautogui.hotkey("win", "ctrl", "f4")
+            return {"success": True, "response_text": "Closed current desktop."}
+        except Exception as e:
+            logger.error("Close desktop failed: %s", e)
+            return {"success": False, "response_text": "Failed to close current desktop."}
+
+    def clipboard_shortcut(self, operation: str):
+        try:
+            import pyautogui
+            key_map = {
+                "copy": ("ctrl", "c"),
+                "paste": ("ctrl", "v"),
+                "cut": ("ctrl", "x"),
+                "select_all": ("ctrl", "a"),
+            }
+            combo = key_map.get(operation)
+            if not combo:
+                return {"success": False, "response_text": "Clipboard action not supported."}
+            pyautogui.hotkey(*combo)
+            labels = {
+                "copy": "Copied selection.",
+                "paste": "Pasted from clipboard.",
+                "cut": "Cut selection.",
+                "select_all": "Selected all.",
+            }
+            return {"success": True, "response_text": labels.get(operation, "Done.")}
+        except Exception as e:
+            logger.error("Clipboard action failed: %s", e)
+            return {"success": False, "response_text": "Failed clipboard action."}
+
     def launch_app(self, entities):
         app = (entities.get("app") or "").strip().lower()
         if not app:
@@ -284,6 +424,60 @@ class OSActions:
         except Exception as e:
             logger.error("Launch failed: %s", e)
             return {"success": False, "response_text": "Failed to launch app"}
+
+    def switch_to_app(self, entities):
+        app = (entities.get("app") or "").strip().lower()
+        if not app:
+            return {"success": False, "response_text": "No app specified"}
+
+        try:
+            import pygetwindow as gw
+
+            tokens = self._window_match_tokens(app)
+            windows = [w for w in gw.getAllWindows() if getattr(w, "title", "")]
+
+            for win in reversed(windows):
+                title = (win.title or "").lower()
+                if any(token in title for token in tokens):
+                    try:
+                        if getattr(win, "isMinimized", False):
+                            win.restore()
+                    except Exception:
+                        pass
+                    try:
+                        win.activate()
+                    except Exception:
+                        pass
+                    return {
+                        "success": True,
+                        "response_text": f"Switched to {app}",
+                    }
+
+            launch_result = self.launch_app({"app": app})
+            if launch_result.get("success"):
+                return {
+                    "success": True,
+                    "response_text": f"{app} was not open. Opening it now.",
+                }
+
+            return {"success": False, "response_text": f"Could not switch to {app}"}
+
+        except Exception as e:
+            logger.error("Switch app failed: %s", e)
+            return {"success": False, "response_text": "Failed to switch app."}
+
+    def _window_match_tokens(self, app: str):
+        alias_map = {
+            "vscode": ["visual studio code", "vscode", "code"],
+            "vs code": ["visual studio code", "vscode", "code"],
+            "terminal": ["terminal", "windows terminal", "cmd", "powershell"],
+            "cmd": ["command prompt", "cmd"],
+            "explorer": ["file explorer", "explorer"],
+            "task manager": ["task manager"],
+            "edge": ["microsoft edge", "edge"],
+            "chrome": ["google chrome", "chrome"],
+        }
+        return alias_map.get(app, [app])
 
     def close_app(self, entities):
         app = (entities.get("app") or "").strip().lower()

@@ -12,7 +12,7 @@ ALL_INTENTS = [INTENT_DOCS, INTENT_BROWSER, INTENT_OS, INTENT_AI]
 
 # ── Rule-Based Regex Patterns ──────────────────────────────────────────────────
 # Matched against lowercased input text.
-# More patterns = better coverage = fewer OpenAI calls.
+# More patterns = better coverage = fewer Gemini calls.
 
 INTENT_PATTERNS: dict[str, list[str]] = {
 
@@ -37,7 +37,7 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\bscroll\b.*(up|down|left|right)",
         r"\b(fill|type|enter)\b.*(field|form|input|email|password)",
         r"\b(go back|go forward|previous page|next page|refresh|reload)\b",
-        r"\b(new tab|close tab|switch tab|next tab|previous tab)\b",
+        r"\b(new tab|close tab|switch tab|switch to tab|next tab|previous tab|prev tab)\b",
         r"\b(read|read out|read aloud)\b.*(page|article|content)",
         r"\bdownload\b",
         r"\b(zoom in|zoom out)\b.*(page|browser)?",
@@ -47,7 +47,9 @@ INTENT_PATTERNS: dict[str, list[str]] = {
 
     INTENT_OS: [
         r"\b(open|launch|start|run)\b.*(app|application|program|software|notepad|vscode|calculator|terminal|explorer|chrome|firefox)",
+        r"\b(switch|focus)\s+to\s+(notepad|vscode|vs code|calculator|terminal|explorer|chrome|edge|firefox|settings|task manager|word|excel|powerpoint|spotify|zoom|slack|teams|discord)\b",
         r"\b(close|quit|exit|kill)\b.*(app|window|program|tab)",
+        r"\b(close|quit|exit|kill)\s+(this|that|it)\b",
         r"\b(volume|brightness|wifi|bluetooth|sound)\b",
         r"\b(screenshot|screen capture|capture screen|print screen)\b",
         r"\b(timer|stopwatch)\b",
@@ -58,6 +60,8 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\b(minimize|maximize|restore|resize)\b.*(window|all)?",
         r"\b(task manager|file manager|control panel|system settings)\b",
         r"\b(switch window|alt tab|next window)\b",
+        r"\b(show desktop|task view|virtual desktop|new desktop|close desktop)\b",
+        r"\b(copy|paste|cut|select all)\b",
         r"\b(empty trash|recycle bin)\b",
         r"\b(connect|disconnect)\b.*(wifi|bluetooth|internet)\b",
     ],
@@ -76,7 +80,7 @@ INTENT_PATTERNS: dict[str, list[str]] = {
 }
 
 
-# ── OpenAI System Prompt ────────────────────────────────────────────────────────
+# ── LLM System Prompt (used by Gemini fallback) ────────────────────────────────
 LLM_SYSTEM_PROMPT = """You are an intent classifier for a voice-controlled computer assistant.
 Classify the user's voice command into EXACTLY one of these 4 intents:
 

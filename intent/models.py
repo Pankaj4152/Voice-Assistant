@@ -8,7 +8,7 @@ from enum import Enum
 class ClassificationMethod(str, Enum):
     """How the intent was determined."""
     RULE = "rule"    # Matched a regex pattern — instant, free
-    LLM  = "llm"     # Sent to OpenAI — used only for ambiguous commands
+    LLM  = "llm"     # Sent to Gemini — used only for ambiguous commands
     NONE = "none"    # Empty input, no classification attempted
 
 

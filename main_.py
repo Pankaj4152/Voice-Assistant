@@ -1,10 +1,12 @@
 import tempfile
+import time
 import numpy as np
 import scipy.io.wavfile as wav
 
 from voice.vad import VAD
 from voice.wake_word import WakeWordDetector
 from voice.asr import WhisperASR
+from telemetry.logger import TelemetryLogger
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -30,10 +32,10 @@ class VoicePipeline:
         picovoice_access_key: str = "",
         wake_word: str = "jarvis",
         wake_word_path: str = None,
-        wake_sensitivity: float = 0.5,
+        wake_sensitivity: float = 0.65,
         whisper_model: str = "base",
         sample_rate: int = 16000,
-        vad_aggressiveness: int = 2,
+        vad_aggressiveness: int = 1,
     ):
         self.logger = logger
         self.sample_rate = sample_rate
@@ -75,9 +77,18 @@ class VoicePipeline:
 
     def _transcribe_array(self, audio: np.ndarray) -> str:
         """Transcribe a numpy audio array directly (no re-recording)."""
+        started = time.time()
         audio_path = self._audio_to_wav(audio)
         result = self.asr.model.transcribe(audio_path)
-        return result.get("text", "").strip()
+        text = result.get("text", "").strip()
+        if self.logger:
+            self.logger.log_latency("ASR", started)
+            self.logger.log_event(
+                "ASR",
+                "Transcription completed",
+                metadata={"text_present": bool(text), "text_length": len(text or "")},
+            )
+        return text
 
     def run(self, on_command=None):
         """
@@ -90,6 +101,8 @@ class VoicePipeline:
         The loop runs forever until KeyboardInterrupt.
         """
         print("[Pipeline] 🚀 Running. Press Ctrl+C to stop.\n")
+        if self.logger:
+            self.logger.log_event("Pipeline", "Run loop started")
 
         try:
             for audio_chunk in self.vad.listen():
@@ -97,6 +110,8 @@ class VoicePipeline:
                 if not self._listening_for_command:
                     if self.wake_word.detect(audio_chunk):
                         print("[Pipeline] ✅ Wake word heard — listening for command...")
+                        if self.logger:
+                            self.logger.log_event("WakeWord", "Wake accepted")
                         self._listening_for_command = True
 
                 # ── STATE 2: Wake word heard — transcribe next utterance ─────
@@ -121,14 +136,25 @@ class VoicePipeline:
 
         except KeyboardInterrupt:
             print("\n[Pipeline] Stopped by user.")
+            if self.logger:
+                self.logger.log_event("Pipeline", "Run loop interrupted by user")
+
+        except Exception as e:
+            if self.logger:
+                self.logger.log_error("Pipeline", e)
+            raise
 
         finally:
             self.wake_word.cleanup()
+            if self.logger:
+                self.logger.log_event("Pipeline", "Run loop stopped")
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+
+    telemetry = TelemetryLogger()
 
     ACCESS_KEY = os.getenv("PICOVOICE_ACCESS_KEY", "")
 
@@ -143,14 +169,17 @@ if __name__ == "__main__":
         Example: pass text to an LLM, run a regex intent parser, etc.
         """
         print(f"\n🤖 Handling: '{text}'")
+        telemetry.log_event("Command", "Command received", metadata={"text": text})
         # TODO: intent = IntentEngine().parse(text)
         # TODO: ActionRouter().execute(intent)
 
     pipeline = VoicePipeline(
+        logger=telemetry,
         picovoice_access_key=ACCESS_KEY,
         wake_word="jarvis",
         whisper_model="base",
-        vad_aggressiveness=2,
+        vad_aggressiveness=1,
+        wake_sensitivity=0.65,
     )
 
     pipeline.run(on_command=handle_command)

@@ -13,7 +13,9 @@ class VAD:
     """
 
     def __init__(self, logger=None, sample_rate=16000, aggressiveness=2,
-                 frame_duration_ms=30, padding_duration_ms=500):
+                 frame_duration_ms=30, padding_duration_ms=500,
+                 min_segment_ms=350, start_trigger_ratio=0.6,
+                 end_trigger_ratio=0.8):
         """
         sample_rate: 16000Hz (WebRTC VAD requirement)
         aggressiveness: 0-3 (0 = least aggressive filtering, 3 = most aggressive)
@@ -21,14 +23,18 @@ class VAD:
         padding_duration_ms: silence padding before cutting off speech (500ms default)
 
         """
-        # Minimum voiced segment length to send to ASR (avoid transcribing noise bursts)
-        self.min_segment_samples = int(sample_rate * 0.5)  # 0.5 seconds
+        # Minimum voiced segment length to send downstream.
+        # Keeping this slightly below half a second helps short wake words like
+        # "jarvis" survive the VAD gate while still filtering tiny noise bursts.
+        self.min_segment_samples = int(sample_rate * min_segment_ms / 1000)
         self.logger = logger
         self.sample_rate = sample_rate
         self.frame_duration_ms = frame_duration_ms
         self.frame_size = int(sample_rate * frame_duration_ms / 1000)  # samples per frame
         self.padding_duration_ms = padding_duration_ms
         self.num_padding_frames = padding_duration_ms // frame_duration_ms
+        self.start_trigger_ratio = float(start_trigger_ratio)
+        self.end_trigger_ratio = float(end_trigger_ratio)
 
         self.vad = webrtcvad.Vad(aggressiveness)
 
@@ -40,7 +46,8 @@ class VAD:
             self.logger.log_event("VAD", f"Initialized (aggressiveness={aggressiveness})")
 
         print(f"[VAD] Initialized — aggressiveness={aggressiveness}, "
-              f"frame={frame_duration_ms}ms, padding={padding_duration_ms}ms")
+              f"frame={frame_duration_ms}ms, padding={padding_duration_ms}ms, "
+              f"min_segment={min_segment_ms}ms")
 
     def _is_speech(self, frame: np.ndarray) -> bool:
         """Convert float32 frame to int16 PCM and check for speech."""
@@ -81,9 +88,9 @@ class VAD:
                 if not self.triggered:
                     self.ring_buffer.append((frame, is_speech))
 
-                    # If >75% of the ring buffer is speech → start capturing
+                    # Start a little earlier so short wake words are less likely to be clipped.
                     num_voiced = sum(1 for _, speech in self.ring_buffer if speech)
-                    if num_voiced > 0.75 * self.ring_buffer.maxlen:
+                    if num_voiced > self.start_trigger_ratio * self.ring_buffer.maxlen:
                         self.triggered = True
                         voiced_frames = [f for f, _ in self.ring_buffer]
                         self.ring_buffer.clear()
@@ -96,9 +103,9 @@ class VAD:
                     voiced_frames.append(frame)
                     self.ring_buffer.append((frame, is_speech))
 
-                    # If >80% of ring buffer is silence → end of utterance
+                    # End capture once the tail is mostly silence.
                     num_unvoiced = sum(1 for _, speech in self.ring_buffer if not speech)
-                    if num_unvoiced > 0.8 * self.ring_buffer.maxlen:
+                    if num_unvoiced > self.end_trigger_ratio * self.ring_buffer.maxlen:
                         self.triggered = False
                         self.ring_buffer.clear()
 

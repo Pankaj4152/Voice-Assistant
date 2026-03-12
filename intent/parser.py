@@ -135,6 +135,7 @@ class IntentParser:
         action_map = {
             "new_tab":   r"\bnew tab\b",
             "close_tab": r"\bclose tab\b",
+            "switch_tab": r"\b(switch|go)\s+to\s+tab\b|\bswitch tab\b",
             "next_tab":  r"\bnext tab\b",
             "prev_tab":  r"\b(previous tab|prev tab)\b",
             "refresh":   r"\b(refresh|reload)\b|\brefresh page\b",
@@ -187,6 +188,8 @@ class IntentParser:
             e["direction"] = m.group(1)
         if m := re.search(r"(\d+)\s+times?", t):
             e["times"] = int(m.group(1))
+        if m := re.search(r"\btab\s+(\d{1,2})\b", t):
+            e["tab_index"] = int(m.group(1))
 
         return e
 
@@ -301,7 +304,9 @@ class IntentParser:
                 return e
 
         action_map = {
+            "switch_app": r"\b(switch|focus)\s+to\s+(?!tab\b)",
             "launch":     r"\b(open|launch|start|run)\b",
+            "close_window": r"\b(close|quit|exit)\b\s+(this|current)?\s*(window|app)\b|\bclose this\b",
             "close":      r"\b(close|quit|exit|kill)\b",
             "screenshot": r"\b(screenshot|screen capture|capture screen)\b",
             "increase":   r"\b(increase|raise)\b.*(volume|brightness)\b",
@@ -315,6 +320,19 @@ class IntentParser:
             "sleep":      r"\bsleep\b",
             "minimize":   r"\bminimize\b",
             "maximize":   r"\bmaximize\b",
+            "restore":    r"\brestore\b",
+            "switch_window": r"\b(switch|next)\s+(window|app)\b|\balt tab\b",
+            "previous_window": r"\b(previous|last)\s+(window|app)\b|\bback window\b",
+            "task_view":  r"\btask view\b|\bshow tasks\b",
+            "show_desktop": r"\b(show|go to)\s+desktop\b",
+            "new_desktop": r"\b(new|create)\s+(desktop|virtual desktop)\b",
+            "next_desktop": r"\bnext\s+(desktop|virtual desktop)\b",
+            "previous_desktop": r"\b(previous|last)\s+(desktop|virtual desktop)\b",
+            "close_desktop": r"\bclose\s+(desktop|virtual desktop)\b",
+            "copy":       r"\bcopy\b(?!\b.*(file|folder|directory))",
+            "paste":      r"\bpaste\b(?!\b.*(file|folder|directory))",
+            "cut":        r"\bcut\b(?!\b.*(file|folder|directory))",
+            "select_all": r"\bselect all\b",
             "copy_file":  r"\bcopy\b.*(file|folder)",
             "move_file":  r"\bmove\b.*(file|folder)",
             "delete_file":r"\bdelete\b.*(file|folder)",
@@ -337,7 +355,7 @@ class IntentParser:
                 e["app"] = app
                 break
         if "app" not in e:
-            if m := re.search(r"\b(open|launch|start|run|close|quit|exit)\b\s+(.+?)(\s+(app|application|program|window)|$)", t):
+            if m := re.search(r"\b(open|launch|start|run|close|quit|exit|switch|focus)\b\s+(?:to\s+)?(.+?)(\s+(app|application|program|window)|$)", t):
                 candidate = m.group(2).strip()
                 if candidate:
                     e["app"] = candidate

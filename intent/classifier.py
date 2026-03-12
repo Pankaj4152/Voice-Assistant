@@ -1,11 +1,11 @@
 """
 intent/classifier.py
 ─────────────────────
-Hybrid Intent Classifier: Rule-Based → OpenAI GPT-4o-mini fallback
+Hybrid Intent Classifier: Rule-Based → Gemini fallback
 
 Pipeline:
     1. Rule-based  — regex pattern scoring, instant, free (handles ~90% commands)
-    2. OpenAI fallback — GPT-4o-mini, only for ambiguous commands rules can't handle
+    2. Gemini fallback — only for ambiguous commands rules can't handle
 
 Usage:
     from intent.classifier import IntentClassifier
@@ -34,16 +34,16 @@ class IntentClassifier:
     Hybrid intent classifier.
 
     Step 1 → Rule-based regex scoring  (instant, zero cost)
-    Step 2 → OpenAI GPT-4o-mini        (only if Step 1 fails)
+    Step 2 → Gemini                     (only if Step 1 fails)
     """
 
     def __init__(self):
-        self._cfg = intent_config.openai
+        self._cfg = intent_config.gemini
         self._clf_cfg = intent_config.classifier
 
         if not self._cfg.api_key:
             logger.warning(
-                "OPENAI_API_KEY not found in environment. "
+                "GEMINI_API_KEY not found in environment. "
                 "LLM fallback will raise APIKeyMissingError if triggered."
             )
 
@@ -84,9 +84,9 @@ class IntentClassifier:
                 confidence=confidence,
             )
 
-        # ── Step 2: OpenAI fallback ────────────
-        logger.info("No rule matched → OpenAI fallback (gpt-4o-mini)...")
-        return self._openai_classify(text)
+        # ── Step 2: Gemini fallback ────────────
+        logger.info("No rule matched → Gemini fallback (%s)...", self._cfg.model)
+        return self._gemini_classify(text)
 
     # ──────────────────────────────────────────────────────────────────
     # PRIVATE — RULE-BASED SCORING
@@ -119,44 +119,44 @@ class IntentClassifier:
         return best_intent, min(round(confidence, 2), 1.0)
 
     # ──────────────────────────────────────────────────────────────────
-    # PRIVATE — OPENAI FALLBACK
+    # PRIVATE — GEMINI FALLBACK
     # ──────────────────────────────────────────────────────────────────
 
-    def _openai_classify(self, text: str) -> IntentResult:
+    def _gemini_classify(self, text: str) -> IntentResult:
         """
-        Classify using OpenAI GPT-4o-mini.
+        Classify using Gemini.
         Only called when rule-based fails (~10% of commands).
         """
         if not self._cfg.api_key:
             raise APIKeyMissingError()
 
         try:
-            from openai import OpenAI, APITimeoutError, APIStatusError
+            import google.generativeai as genai
 
-            client = OpenAI(
-                api_key=self._cfg.api_key,
-                timeout=self._cfg.request_timeout,
-            )
+            genai.configure(api_key=self._cfg.api_key)
+            model = genai.GenerativeModel(self._cfg.model)
 
-            response = client.chat.completions.create(
-                model=self._cfg.model,
-                messages=[
-                    {"role": "system", "content": LLM_SYSTEM_PROMPT},
-                    {"role": "user",   "content": text},
+            response = model.generate_content(
+                [
+                    LLM_SYSTEM_PROMPT,
+                    f"User command: {text}",
                 ],
-                max_tokens=self._cfg.max_tokens,
-                temperature=self._cfg.temperature,
+                generation_config=genai.GenerationConfig(
+                    temperature=self._cfg.temperature,
+                    max_output_tokens=self._cfg.max_tokens,
+                ),
+                request_options={"timeout": self._cfg.request_timeout},
             )
 
-            raw = response.choices[0].message.content.strip().upper()
-            logger.debug("OpenAI raw response: '%s'", raw)
+            raw = ((getattr(response, "text", "") or "").strip().upper())
+            logger.debug("Gemini raw response: '%s'", raw)
 
             detected = next(
                 (intent for intent in ALL_INTENTS if intent in raw),
                 INTENT_UNKNOWN,
             )
 
-            logger.info("OpenAI → %s", detected)
+            logger.info("Gemini → %s", detected)
             return IntentResult(
                 text=text,
                 intent=detected,
@@ -164,14 +164,14 @@ class IntentClassifier:
                 confidence=0.95,
             )
 
-        except APITimeoutError:
-            raise ClassificationTimeoutError(self._cfg.request_timeout)
-
-        except APIStatusError as e:
-            raise APIRequestError(str(e))
-
         except Exception as e:
-            logger.error("OpenAI classification failed: %s", e)
+            err = str(e).lower()
+            if "deadline" in err or "timed out" in err or "timeout" in err:
+                raise ClassificationTimeoutError(self._cfg.request_timeout)
+            if "api" in err or "permission" in err or "quota" in err or "key" in err:
+                raise APIRequestError(str(e))
+
+            logger.error("Gemini classification failed: %s", e)
             return IntentResult(
                 text=text,
                 intent=INTENT_UNKNOWN,
