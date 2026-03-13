@@ -4,13 +4,13 @@ from intent.constants import (
     INTENT_DOCS,
     INTENT_AI,
 )
-
+from .security_layer import SecurityLayer
 from .voice_browser import BrowserActions
 from .voice_os import OSActions
 from .voice_files import FileActions
 from .voice_media import AIActions
 from .session_memory import SessionMemory
-
+from tts_engine import speak
 
 class ActionEngine:
 
@@ -21,6 +21,7 @@ class ActionEngine:
         self.files = FileActions()
         self.ai = AIActions()
         self.session_memory = SessionMemory()
+        self.security = SecurityLayer()
 
     def execute(self, parsed_intent):
 
@@ -28,7 +29,17 @@ class ActionEngine:
         entities = self.session_memory.resolve(parsed_intent, parsed_intent.entities)
         parsed_intent.entities = entities
 
-        if intent == INTENT_BROWSER:
+        security_result = self.security.check(parsed_intent)
+
+        if not security_result["allowed"]:
+            result = {
+                "success": False,
+                "response_text": "Sorry, this command is not allowed for security reasons.",
+                "intent": intent,
+                "entities": entities,
+            }
+
+        elif intent == INTENT_BROWSER:
             result = self.browser.handle(entities, parsed_intent=parsed_intent)
 
         elif intent == INTENT_OS:
@@ -49,4 +60,8 @@ class ActionEngine:
             }
 
         self.session_memory.remember(parsed_intent, entities, result)
+
+        if result.get("response_text") and isinstance(result["response_text"], str):
+            speak(result["response_text"])
+
         return result
