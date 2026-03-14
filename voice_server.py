@@ -36,22 +36,33 @@ from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
 from telemetry.logger import TelemetryLogger
 from rag import RAGPipeline
-
+import threading
 parser = IntentParser()
 engine = ActionEngine()
 rag_pipeline = RAGPipeline()
 
 
 def speak(text: str) -> None:
-    """Best-effort TTS. Falls back to console print if unavailable."""
-    try:
-        import pyttsx3
-        tts = pyttsx3.init()
-        tts.say(text)
-        tts.runAndWait()
-    except Exception as e:
-        _logger.debug(f"TTS unavailable: {e}")
-        print(f"[TTS] {text}")
+    def _speak(text: str) -> None:
+        try:
+            import pyttsx3
+            tts = pyttsx3.init()
+            tts.say(text)
+            tts.runAndWait()
+        except Exception as e:
+            _logger.debug(f"TTS unavailable: {e}")
+            print(f"[TTS] {text}")
+    threading.Thread(target=_speak, args=(text,)).start()
+    # """Best-effort TTS. Falls back to console print if unavailable."""
+    # try:
+    #     import pyttsx3
+    #     tts = pyttsx3.init()
+    #     tts.say(text)
+    #     tts.runAndWait()
+    # except Exception as e:
+    #     _logger.debug(f"TTS unavailable: {e}")
+    #     print(f"[TTS] {text}")
+
 
 
 class VoicePipeline:
@@ -88,7 +99,7 @@ class VoicePipeline:
                 aggressiveness=vad_aggressiveness,
                 enable_noise_suppression=vad_enable_noise_suppression
             )
-            print("[Pipeline] ✓ VAD initialized")
+            print("[Pipeline] VAD initialized")
         except Exception as e:
             _logger.error(f"VAD initialization failed: {e}")
             raise
@@ -101,7 +112,7 @@ class VoicePipeline:
                 keyword_path=wake_word_path,
                 sensitivity=wake_sensitivity
             )
-            print("[Pipeline] ✓ Wake word detector initialized")
+            print("[Pipeline] Wake word detector initialized")
         except Exception as e:
             _logger.error(f"Wake word initialization failed: {e}")
             raise
@@ -112,7 +123,7 @@ class VoicePipeline:
                 model_size=whisper_model,
                 sample_rate=sample_rate
             )
-            print("[Pipeline] ✓ ASR initialized")
+            print("[Pipeline]  ASR initialized")
         except Exception as e:
             _logger.error(f"ASR initialization failed: {e}")
             raise
@@ -161,7 +172,7 @@ class VoicePipeline:
         return text if text else self._transcribe_via_wav_file(audio)
 
     def run(self, on_command=None):
-        print("[Pipeline] 🚀 Running. Press Ctrl+C to stop.\n")
+        print("[Pipeline]  Running. Press Ctrl+C to stop.\n")
 
         try:
             for audio_chunk in self.vad.listen():
@@ -175,11 +186,11 @@ class VoicePipeline:
                             print("[Pipeline]  Wake word detected — now listening for command...")
                             self._listening_for_command = True
                 else:
-                    print("[Pipeline] 🧠 Processing command...")
+                    print("[Pipeline] Processing command...")
                     text = self.transcribe(audio_chunk)
 
                     if text:
-                        print(f"[Pipeline] 📝 Recognized: '{text}'")
+                        print(f"[Pipeline] Recognized: '{text}'")
                         
                         if on_command:
                             on_command(text)
@@ -189,7 +200,7 @@ class VoicePipeline:
                     # Keep listening for follow-up commands for a short window.
                     self._command_mode_until = time.time() + float(self._followup_window_sec)
                     self._listening_for_command = False
-                    print(f"[Pipeline] 👂 Follow-up mode for {self._followup_window_sec}s...\n")
+                    print(f"[Pipeline]  Follow-up mode for {self._followup_window_sec}s...\n")
 
         except KeyboardInterrupt:
             print("\n[Pipeline] Stopped by user.")
@@ -257,7 +268,7 @@ class VoiceAssistantServer:
             },
         )
 
-        print(f"[Server] 🚀 Ready on ws://{host}:{port}")
+        print(f"[Server]  Ready on ws://{host}:{port}")
 
     # ── WebSocket broadcast ───────────────────────────────────────────────────
 
@@ -330,12 +341,13 @@ class VoiceAssistantServer:
     async def handle_command(self, text: str):
         """Process a voice command: RAG normalize → Intent → Action → Response"""
         print("\n" + "═" * 60)
-        print(f"🤖 COMMAND RECEIVED: '{text}'")
+        print(f" COMMAND RECEIVED: '{text}'")
         command_started = time.time()
         self.telemetry.log_event("Command", "Command received", metadata={"text": text})
 
         try:
-            await self.send_state("processing")
+            # await self.send_state("processing")
+            self._fire(self.send_state("processing"))
             # RAG: strip filler words and normalize for intent/action_engine
             cleaned = rag_pipeline.normalize(text)
             command_text = cleaned if (cleaned and cleaned.strip()) else text
@@ -361,7 +373,8 @@ class VoiceAssistantServer:
             print(f"[INTENT] {parsed.intent} (conf: {parsed.confidence:.2f})")
             print(f"[ENTITIES] {parsed.entities}")
 
-            await self.send_state("executing")
+            # await self.send_state("executing")
+            self._fire(self.send_state("executing"))
 
             # ── Step 2: Execute action ─────────────────
             action_started = time.time()
@@ -386,7 +399,8 @@ class VoiceAssistantServer:
                 response=response_text
             )
             speak(response_text)
-            await self.send_state("done")
+            # await self.send_state("done")
+            self._fire(self.send_state("done"))
 
         except Exception as e:
             error_msg = f"Command processing failed: {e}"
@@ -442,7 +456,9 @@ class VoiceAssistantServer:
                             self.loop
                         )
                         try:
-                            future.result(timeout=10)
+                            future.result(timeout=30)
+                        except TimeoutError:
+                            _logger.error(f"[Pipeline] Command timed out: {text}")
                         except Exception as e:
                             print(f"[Pipeline] Error executing command: {e}")
                     else:

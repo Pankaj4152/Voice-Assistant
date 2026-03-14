@@ -8,7 +8,7 @@ RAG pipeline: index intent/ and actions/ for flexible command normalization.
 - Strips filler words and normalizes whitespace so the intent parser and
   action_engine receive a clean, desired command string.
 """
-
+from functools import lru_cache
 import os
 import re
 import time
@@ -202,7 +202,7 @@ class RAGPipeline:
             len(self._command_verbs),
             len(self._action_keywords),
         )
-
+    @lru_cache(maxsize=256)
     def normalize(self, text: str) -> str:
         """
         Strip filler words and normalize whitespace. Returns a clean command
