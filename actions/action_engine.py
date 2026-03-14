@@ -14,7 +14,7 @@ from tts_engine import speak
 
 class ActionEngine:
 
-    def __init__(self):
+    def __init__(self, auto_speak: bool = True):
 
         self.browser = BrowserActions()
         self.os = OSActions()
@@ -22,6 +22,7 @@ class ActionEngine:
         self.ai = AIActions()
         self.session_memory = SessionMemory()
         self.security = SecurityLayer()
+        self.auto_speak = auto_speak
 
     def execute(self, parsed_intent):
 
@@ -61,7 +62,7 @@ class ActionEngine:
 
         self.session_memory.remember(parsed_intent, entities, result)
 
-        if result.get("response_text") and isinstance(result["response_text"], str):
+        if self.auto_speak and result.get("response_text") and isinstance(result["response_text"], str):
             speak(result["response_text"])
 
         return result

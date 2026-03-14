@@ -37,7 +37,7 @@ from actions.action_engine import ActionEngine
 from telemetry.logger import TelemetryLogger
 
 parser = IntentParser()
-engine = ActionEngine()
+engine = ActionEngine(auto_speak=False)
 
 
 def speak(text: str) -> None:
@@ -129,6 +129,8 @@ class VoicePipeline:
     # Commands the assistant understands — helps Whisper narrow down what to expect
     _INITIAL_PROMPT = (
         "Open chrome, open YouTube, play music, pause, stop, volume up, volume down, "
+        "what is volume, what is battery status, check wifi status, am i online, "
+        "what is on screen, describe screen, where am i, environment status report, "
         "set a timer, search for, close window, open settings, take screenshot, "
         "what time is it, open notepad, open file explorer"
     )
@@ -376,7 +378,6 @@ class VoiceAssistantServer:
                 entities=parsed.entities,
                 response=response_text
             )
-            
             speak(response_text)
             await self.send_state("done")
 

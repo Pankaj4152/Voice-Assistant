@@ -18,12 +18,14 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 from .voice_timer import TimerActions
+from .general_commands import GeneralCommands
 
 
 class OSActions:
 
     def __init__(self):
         self.timer = TimerActions()
+        self.general = GeneralCommands()
 
     def handle(self, entities, parsed_intent=None):
         action = entities.get("action")
@@ -32,6 +34,30 @@ class OSActions:
 
         if action in ("timer_set", "timer_cancel", "stopwatch_start", "stopwatch_stop", "stopwatch_reset"):
             return self.timer.handle(entities, parsed_intent=parsed_intent)
+
+        if action == "volume_status":
+            return self.general.volume_status()
+
+        if action == "describe_screen":
+            return self.general.describe_screen()
+
+        if action == "battery_status":
+            return self.general.battery_status()
+
+        if action == "wifi_status":
+            return self.general.wifi_status()
+
+        if action == "network_status":
+            return self.general.network_status()
+
+        if action == "active_window_status":
+            return self.general.active_window_status()
+
+        if action == "date_time_status":
+            return self.general.date_time_status()
+
+        if action == "environment_summary":
+            return self.general.environment_summary()
 
         if action == "music_play":
             return self.music_play(entities)

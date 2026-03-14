@@ -201,6 +201,47 @@ class IntentParser:
         t = text.lower()
         e: dict = {}
 
+        # Accessibility-focused query actions
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(volume|sound)\b", t) or re.search(r"\b(volume|sound)\s+(level|status)\b", t):
+            e["action"] = "volume_status"
+            e["target"] = "volume"
+            return e
+
+        if re.search(r"\b(describe|explain|read|tell me)\b.*\b(screen|display)\b", t) or re.search(r"\bwhat(?:'s| is)\b.*\bon\b.*\b(screen|display)\b", t):
+            e["action"] = "describe_screen"
+            e["target"] = "screen"
+            return e
+
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(battery|charge)\b", t) or re.search(r"\b(battery|charge)\s+(level|status|left|remaining)\b", t):
+            e["action"] = "battery_status"
+            e["target"] = "battery"
+            return e
+
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(wi\s*-?\s*fi|wifi|wireless)\b", t) or re.search(r"\b(wi\s*-?\s*fi|wifi|wireless)\b.*\b(status|signal|connected|connection|network|ssid)\b", t):
+            e["action"] = "wifi_status"
+            e["target"] = "wifi"
+            return e
+
+        if re.search(r"\b(internet|network)\b.*\b(status|connected|working|online)\b", t) or re.search(r"\bam i\s+(online|offline)\b", t):
+            e["action"] = "network_status"
+            e["target"] = "network"
+            return e
+
+        if re.search(r"\b(which|what)\s+app\b.*\b(open|active|current)\b", t) or re.search(r"\bwhere\s+am\s+i\b", t):
+            e["action"] = "active_window_status"
+            e["target"] = "window"
+            return e
+
+        if re.search(r"\b(what(?:'s| is)?|current|tell me)\b.*\b(time|date|day)\b", t):
+            e["action"] = "date_time_status"
+            e["target"] = "datetime"
+            return e
+
+        if re.search(r"\b(environment|system)\b.*\b(summary|status|report)\b", t) or re.search(r"\bstatus\s+report\b", t):
+            e["action"] = "environment_summary"
+            e["target"] = "environment"
+            return e
+
         # Special multi-window / global actions first
         if re.search(r"\bminimi[sz]e\b.*\ball\b|\bminimi[sz]e all\b", t):
             e["action"] = "minimize_all"

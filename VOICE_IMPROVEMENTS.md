@@ -161,7 +161,7 @@ python voice_server.py
 ```
 
 **Or manually in config:**
-- Set ASR `model_size: "tiny.en"` for speed
+- Set ASR `model_size: "tiny.en"` for w
 - Set ASR `model_size: "small.en"` for balanced
 - Test with smaller model first
 
