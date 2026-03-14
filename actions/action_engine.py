@@ -55,7 +55,7 @@ class ActionEngine:
         else:
             result = {
                 "success": False,
-                "response_text": "No handler for this intent",
+                "response_text": "Sorry, I did not understand that command. Please try again.",
                 "intent": intent,
                 "entities": entities,
             }

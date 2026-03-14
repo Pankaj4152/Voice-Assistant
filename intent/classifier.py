@@ -1,29 +1,22 @@
 """
 intent/classifier.py
 ─────────────────────
-Hybrid Intent Classifier: Rule-Based → Gemini fallback
+Rule-Only Intent Classifier (no external API calls)
 
 Pipeline:
-    1. Rule-based  — regex pattern scoring, instant, free (handles ~90% commands)
-    2. Gemini fallback — only for ambiguous commands rules can't handle
+    1. Rule-based regex scoring  — instant, free, works offline
+    2. AI fallback               — unrecognised speech → AI intent
+                                   (treats the full phrase as a question)
 
-Usage:
-    from intent.classifier import IntentClassifier
-
-    clf = IntentClassifier()
-    result = clf.classify("open youtube and search python")
-    print(result.intent)      # BROWSER
-    print(result.method)      # ClassificationMethod.RULE
-    print(result.confidence)  # 1.0
+No Gemini / LLM dependency. Zero quota issues.
 """
 
 import re
 import logging
-from typing import Optional
 
 from .config import intent_config
-from .constants import ALL_INTENTS, INTENT_UNKNOWN, INTENT_PATTERNS, LLM_SYSTEM_PROMPT
-from .exceptions import APIKeyMissingError, APIRequestError, ClassificationTimeoutError, EmptyInputError
+from .constants import ALL_INTENTS, INTENT_UNKNOWN, INTENT_AI, INTENT_PATTERNS
+from .exceptions import EmptyInputError
 from .models import IntentResult, ClassificationMethod
 
 logger = logging.getLogger(__name__)
@@ -31,23 +24,16 @@ logger = logging.getLogger(__name__)
 
 class IntentClassifier:
     """
-    Hybrid intent classifier.
+    Rule-only intent classifier.
 
-    Step 1 → Rule-based regex scoring  (instant, zero cost)
-    Step 2 → Gemini                     (only if Step 1 fails)
+    If no regex pattern matches the input, the command is routed to the
+    AI intent handler so it can be processed as a conversational query —
+    rather than silently failing or calling an external API.
     """
 
     def __init__(self):
-        self._cfg = intent_config.gemini
         self._clf_cfg = intent_config.classifier
-
-        if not self._cfg.api_key:
-            logger.warning(
-                "GEMINI_API_KEY not found in environment. "
-                "LLM fallback will raise APIKeyMissingError if triggered."
-            )
-
-        logger.debug("IntentClassifier ready | model=%s", self._cfg.model)
+        logger.debug("IntentClassifier ready (rule-only mode)")
 
     # ──────────────────────────────────────────────────────────────────
     # PUBLIC API
@@ -57,15 +43,9 @@ class IntentClassifier:
         """
         Classify a voice command into an intent.
 
-        Args:
-            text: Raw transcribed voice command.
-
         Returns:
-            IntentResult — intent, method, confidence.
-
-        Raises:
-            EmptyInputError: If text is empty.
-            APIKeyMissingError: If LLM triggered but API key not set.
+            IntentResult — intent is always one of DOCS/BROWSER/OS/AI.
+            Never raises due to quota / network issues.
         """
         text = text.strip()
         if not text:
@@ -73,7 +53,7 @@ class IntentClassifier:
 
         logger.info("Classifying → '%s'", text)
 
-        # ── Step 1: Rule-based ─────────────────
+        # ── Rule-based pass ────────────────────
         intent, confidence = self._rule_classify(text)
         if intent != INTENT_UNKNOWN:
             logger.info("Rule match → %s (confidence=%.2f)", intent, confidence)
@@ -84,9 +64,16 @@ class IntentClassifier:
                 confidence=confidence,
             )
 
-        # ── Step 2: Gemini fallback ────────────
-        logger.info("No rule matched → Gemini fallback (%s)...", self._cfg.model)
-        return self._gemini_classify(text)
+        # ── Smart fallback: treat as AI question ──────────────────────
+        # Unrecognised spoken phrases are almost always general questions.
+        # Route to AI so the assistant can answer rather than do nothing.
+        logger.info("No rule matched → AI fallback for: '%s'", text)
+        return IntentResult(
+            text=text,
+            intent=INTENT_AI,
+            method=ClassificationMethod.RULE,
+            confidence=0.5,
+        )
 
     # ──────────────────────────────────────────────────────────────────
     # PRIVATE — RULE-BASED SCORING
@@ -117,64 +104,3 @@ class IntentClassifier:
 
         confidence = best_score / total_matches if total_matches > 0 else 1.0
         return best_intent, min(round(confidence, 2), 1.0)
-
-    # ──────────────────────────────────────────────────────────────────
-    # PRIVATE — GEMINI FALLBACK
-    # ──────────────────────────────────────────────────────────────────
-
-    def _gemini_classify(self, text: str) -> IntentResult:
-        """
-        Classify using Gemini.
-        Only called when rule-based fails (~10% of commands).
-        """
-        if not self._cfg.api_key:
-            raise APIKeyMissingError()
-
-        try:
-            from google import genai
-
-            client = genai.Client(api_key=self._cfg.api_key)
-            
-            response = client.models.generate_content(
-                model=self._cfg.model,
-                contents=[
-                    LLM_SYSTEM_PROMPT,
-                    f"User command: {text}",
-                ],
-                config=genai.types.GenerateContentConfig(
-                    temperature=self._cfg.temperature,
-                    max_output_tokens=self._cfg.max_tokens,
-                ),
-            )
-            
-            raw = response.text.strip().upper() if response.text else ""
-            logger.debug("Gemini raw response: '%s'", raw)
-
-            detected = next(
-                (intent for intent in ALL_INTENTS if intent in raw),
-                INTENT_UNKNOWN,
-            )
-
-            logger.info("Gemini → %s", detected)
-            return IntentResult(
-                text=text,
-                intent=detected,
-                method=ClassificationMethod.LLM,
-                confidence=0.95,
-            )
-
-        except Exception as e:
-            err = str(e).lower()
-            if "deadline" in err or "timed out" in err or "timeout" in err:
-                raise ClassificationTimeoutError(self._cfg.request_timeout)
-            if "api" in err or "permission" in err or "quota" in err or "key" in err:
-                raise APIRequestError(str(e))
-
-            logger.error("Gemini classification failed: %s", e)
-            return IntentResult(
-                text=text,
-                intent=INTENT_UNKNOWN,
-                method=ClassificationMethod.LLM,
-                confidence=0.0,
-                error=str(e),
-            )
