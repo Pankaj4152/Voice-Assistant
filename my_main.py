@@ -118,7 +118,7 @@ class VoicePipeline:
             sample_rate=sample_rate
         )
 
-        print("[Pipeline] ✅ All components ready.")
+        print("[Pipeline]  All components ready.")
         print(f"[Pipeline] Say '{wake_word}' to activate.\n")
         if self.logger:
             self.logger.log_event(
@@ -274,7 +274,7 @@ class VoicePipeline:
                         self._listening_for_command = True
                     else:
                         if self.wake_word.detect(audio_chunk):
-                            print("[Pipeline] ✅ Wake word detected — now listening for command...")
+                            print("[Pipeline]  Wake word detected — now listening for command...")
                             if self.logger:
                                 self.logger.log_event("Pipeline", "Wake accepted")
                             self._listening_for_command = True

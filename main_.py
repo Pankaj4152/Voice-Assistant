@@ -71,7 +71,7 @@ class VoicePipeline:
             sample_rate=sample_rate
         )
 
-        print("[Pipeline] ✅ All components ready.")
+        print("[Pipeline]  All components ready.")
         print(f"[Pipeline] Say '{wake_word}' to activate.\n")
 
     def _audio_to_wav(self, audio: np.ndarray) -> str:
@@ -114,7 +114,7 @@ class VoicePipeline:
                 # ── STATE 1: Waiting for wake word ──────────────────────────
                 if not self._listening_for_command:
                     if self.wake_word.detect(audio_chunk):
-                        print("[Pipeline] ✅ Wake word heard — listening for command...")
+                        print("[Pipeline]  Wake word heard — listening for command...")
                         if self.logger:
                             self.logger.log_event("WakeWord", "Wake accepted")
                         self._listening_for_command = True

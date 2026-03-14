@@ -66,9 +66,9 @@ def print_stats(stats: dict):
     print(f"  Peak    : {stats['peak']:.4f}")
     print(f"  Silence : {stats['silence_ratio']*100:.1f}% of audio is near-silent")
     if stats["silence_ratio"] > 0.9:
-        print("  ⚠️  Mic se almost koi awaaz nahi aayi — mic check karo!")
+        print("    Mic se almost koi awaaz nahi aayi — mic check karo!")
     elif stats["rms"] < 0.005:
-        print("  ⚠️  Volume bahut kam hai — mic ke paas bolo ya gain badhao.")
+        print("    Volume bahut kam hai — mic ke paas bolo ya gain badhao.")
 
 
 def main():
@@ -148,7 +148,7 @@ def main():
             print(f"\n[⏱  Time taken] {elapsed:.2f}s")
             print("─" * 60)
             if text:
-                print(f"  ✅ SUNA  : \"{text}\"")
+                print(f"   SUNA  : \"{text}\"")
             else:
                 print("  ❌ Kuch nahi suna (silent audio ya hallucination filter ne hata diya)")
             print("─" * 60 + "\n")

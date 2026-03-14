@@ -79,11 +79,11 @@ def test_microphone(duration=5, device=None):
         print(f"  Peak Level: {peak:.4f} ({peak*100:.1f}%)")
         
         if rms < 0.01:
-            print("  ⚠️  WARNING: Very low audio level - check microphone connection or volume")
+            print("    WARNING: Very low audio level - check microphone connection or volume")
         elif rms < 0.05:
-            print("  ⚠️  WARNING: Low audio level - may cause recognition issues")
+            print("    WARNING: Low audio level - may cause recognition issues")
         elif rms > 0.9:
-            print("  ⚠️  WARNING: Audio very loud - may be clipping")
+            print("    WARNING: Audio very loud - may be clipping")
         else:
             print("  ✓ Audio level looks good!")
         
@@ -138,7 +138,7 @@ def calibrate_noise_floor(duration=3):
         print(f"  Frame RMS range: {min(rms_values):.4f} - {max(rms_values):.4f}")
         
         if noise_floor > 0.05:
-            print(f"  ⚠️  High background noise detected")
+            print(f"    High background noise detected")
             print(f"     Consider: Reducing background noise, using a better microphone")
         
     except Exception as e:
