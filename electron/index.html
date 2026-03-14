@@ -451,7 +451,7 @@
 			<div class="mic-icon idle" id="micIcon">🎙</div>
 			<div class="status-info">
 				<div class="state-label idle" id="stateLabel">IDLE</div>
-				<div class="state-sub" id="stateSub">Say "Jarvis" to activate</div>
+				<div class="state-sub" id="stateSub">Say "Michael" to activate</div>
 			</div>
 			<div class="waveform" id="waveform">
 				<div class="bar"></div>
@@ -498,9 +498,9 @@
 		const latencyEl = document.getElementById('latency');
 
 		const STATES = {
-			idle: { label: 'IDLE', sub: 'Say "Jarvis" to activate', icon: '🎙', wave: false },
+			idle: { label: 'IDLE', sub: 'Say "Michael" to activate', icon: '🎙', wave: false },
 			listening: { label: 'LISTENING', sub: 'VAD active — speak your command', icon: '🎙', wave: true },
-			wake: { label: 'WAKE WORD', sub: 'Jarvis triggered! Speak now', icon: '🔔', wave: true },
+			wake: { label: 'WAKE WORD', sub: 'Michael triggered! Speak now', icon: '🔔', wave: true },
 			processing: { label: 'PROCESSING', sub: 'Transcribing your command...', icon: '⚡', wave: false },
 			executing: { label: 'EXECUTING', sub: 'Running action...', icon: '▶', wave: false },
 			done: { label: 'DONE', sub: 'Command complete', icon: '✓', wave: false },

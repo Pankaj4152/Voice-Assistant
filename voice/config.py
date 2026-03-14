@@ -22,7 +22,7 @@ class VADConfig:
     """Voice Activity Detection settings."""
     # 0-3: 0 = least filtering (catch more), 3 = most filtering (strict)
     # Lower = more sensitive to voice, but may pick up background noise
-    aggressiveness: int = 0
+    aggressiveness: int = 2
     
     # Frame size (ms): 10, 20, or 30
     frame_duration_ms: int = 30
@@ -96,7 +96,7 @@ class PipelineConfig:
     
     # Follow-up command window (seconds)
     # Time to wait for follow-up commands after first command
-    followup_window_sec: int = 20
+    followup_window_sec: int = 6
     
     # Enable debug logging
     debug: bool = False

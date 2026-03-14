@@ -7,9 +7,14 @@ from voice.vad import VAD
 from voice.wake_word import WakeWordDetector
 from voice.asr import WhisperASR
 from telemetry.logger import TelemetryLogger
+from intent.parser import IntentParser
+from actions.action_engine import ActionEngine
 import os
 from dotenv import load_dotenv
 load_dotenv()
+
+parser = IntentParser()
+engine = ActionEngine()
 
 class VoicePipeline:
     """
@@ -165,13 +170,47 @@ if __name__ == "__main__":
 
     def handle_command(text: str):
         """
-        Plug your Intent + Action logic here.
-        Example: pass text to an LLM, run a regex intent parser, etc.
+        Parse and execute commands through the intent/action pipeline.
         """
         print(f"\n🤖 Handling: '{text}'")
         telemetry.log_event("Command", "Command received", metadata={"text": text})
-        # TODO: intent = IntentEngine().parse(text)
-        # TODO: ActionRouter().execute(intent)
+
+        try:
+            parse_started = time.time()
+            parsed = parser.parse(text)
+            telemetry.log_latency("IntentParse", parse_started)
+            telemetry.log_event(
+                "Intent",
+                "Intent parsed",
+                metadata={
+                    "intent": parsed.intent,
+                    "method": parsed.method.value,
+                    "confidence": parsed.confidence,
+                    "entities": parsed.entities,
+                },
+            )
+
+            print(f"[INTENT] {parsed.intent} (conf: {parsed.confidence:.2f})")
+            print(f"[ENTITIES] {parsed.entities}")
+
+            action_started = time.time()
+            result = engine.execute(parsed)
+            telemetry.log_latency("Action", action_started)
+            telemetry.log_event(
+                "Action",
+                "Action executed",
+                metadata={
+                    "success": bool((result or {}).get("success", False)),
+                    "response_text": (result or {}).get("response_text", ""),
+                    "intent": parsed.intent,
+                },
+            )
+
+            print("[ACTION RESULT]", result)
+
+        except Exception as e:
+            print("[ERROR] Command processing failed:", e)
+            telemetry.log_error("Command", e)
 
     pipeline = VoicePipeline(
         logger=telemetry,

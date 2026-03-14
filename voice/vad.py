@@ -38,7 +38,7 @@ class VAD:
         self.start_trigger_ratio = float(start_trigger_ratio)
         self.end_trigger_ratio = float(end_trigger_ratio)
         self.enable_noise_suppression = enable_noise_suppression
-        self.noise_floor = 0.01  # Auto-calibrated if needed; lower = more sensitive
+        self.noise_floor = 0.03  # Auto-calibrated if needed; lower = more sensitive
         
         # Enforce aggressiveness bounds: 0-3, default to 1 for better sensitivity
         self.aggressiveness = max(0, min(3, int(aggressiveness)))
