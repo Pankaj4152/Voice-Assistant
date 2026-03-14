@@ -591,6 +591,7 @@ class OSActions:
             return {"success": False, "response_text": "Failed to change brightness."}
 
     def music_play(self, entities):
+        import pywhatkit
         platform = (entities.get("platform") or "").strip().lower()
         name = (entities.get("name") or "").strip()
         if not platform:
@@ -608,13 +609,14 @@ class OSActions:
                 subprocess.Popen('start "" "https://music.youtube.com/"', shell=True)
                 return {"success": True, "response_text": "Playing music on YouTube."}
 
-            video_url = self._youtube_first_video_url(name)
-            if not video_url:
-                url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(name)}"
-                subprocess.Popen(f'start "" "{url}"', shell=True)
-                return {"success": True, "response_text": f"Searching {name} on YouTube."}
+            # video_url = self._youtube_first_video_url(name)
+            # if not video_url:
+            #     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(name)}"
+            #     subprocess.Popen(f'start "" "{url}"', shell=True)
+            #     return {"success": True, "response_text": f"Searching {name} on YouTube."}
 
-            subprocess.Popen(f'start "" "{video_url}"', shell=True)
+            # subprocess.Popen(f'start "" "{video_url}"', shell=True)
+            pywhatkit.playonyt(name)
             return {"success": True, "response_text": f"Playing {name} on YouTube."}
         except Exception as e:
             logger.error("Music play failed: %s", e)
