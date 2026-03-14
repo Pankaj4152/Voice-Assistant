@@ -38,7 +38,7 @@ class VAD:
         self.start_trigger_ratio = float(start_trigger_ratio)
         self.end_trigger_ratio = float(end_trigger_ratio)
         self.enable_noise_suppression = enable_noise_suppression
-        self.noise_floor = 0.02  # Auto-calibrated if needed
+        self.noise_floor = 0.01  # Auto-calibrated if needed; lower = more sensitive
         
         # Enforce aggressiveness bounds: 0-3, default to 1 for better sensitivity
         self.aggressiveness = max(0, min(3, int(aggressiveness)))
@@ -97,10 +97,14 @@ class VAD:
                 rms_values.append(rms)
             
             if rms_values:
-                self.noise_floor = np.percentile(rms_values, 75) * 1.5  # Add 50% margin
+                # Use median (50th percentile) × 1.8 — less aggressive than 75th×1.5
+                # which was cutting off real speech in moderately noisy environments
+                self.noise_floor = np.percentile(rms_values, 50) * 1.8
+                # Hard cap: never set noise floor above 0.05 or below 0.005
+                self.noise_floor = max(0.005, min(0.05, self.noise_floor))
                 print(f"[VAD] ✓ Noise floor calibrated: {self.noise_floor:.4f}")
             else:
-                self.noise_floor = 0.02
+                self.noise_floor = 0.01
         except Exception as e:
             _logger.error(f"Error during noise floor calibration: {e}")
             self.noise_floor = 0.02

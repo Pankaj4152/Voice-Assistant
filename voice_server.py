@@ -64,8 +64,8 @@ class VoicePipeline:
         self,
         logger=None,
         picovoice_access_key: str = "",
-        wake_word: str = "jarvis",
-        wake_word_path: str = None,
+        wake_word: str = "michael",
+        wake_word_path: str = os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
         wake_sensitivity: float = 0.65,
         whisper_model: str = "base.en",
         sample_rate: int = 16000,
@@ -214,7 +214,8 @@ class VoiceAssistantServer:
         host: str = "localhost",
         port: int = 8765,
         picovoice_access_key: str = "",
-        wake_word: str = "jarvis",
+        wake_word: str = "michael",
+        wake_word_path: str = os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
         whisper_model: str = "base.en",
         sample_rate: int = 16000,
         vad_aggressiveness: int = 1,
@@ -234,6 +235,7 @@ class VoiceAssistantServer:
             logger=self.telemetry,
             picovoice_access_key=picovoice_access_key,
             wake_word=wake_word,
+            wake_word_path=wake_word_path,
             wake_sensitivity=wake_sensitivity,
             whisper_model=whisper_model,
             sample_rate=sample_rate,
@@ -492,12 +494,13 @@ if __name__ == "__main__":
 
     server = VoiceAssistantServer(
         picovoice_access_key=ACCESS_KEY,
-        wake_word="jarvis",
+        wake_word="michael",
+        wake_word_path=os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
         whisper_model="small.en",  # English-only small model: better accuracy than base
         vad_aggressiveness=1,      # 1 = less filtering, catches accented speech better
     )
 
-    print("Voice Assistant Server ready! Electron clients can now connect.\n")
+    print("Voice Assistant Server ready! Say 'michael' to activate. Electron clients can connect.\n")
 
     try:
         asyncio.run(server.run_async())

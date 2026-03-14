@@ -82,8 +82,8 @@ class VoicePipeline:
         self,
         logger=None,
         picovoice_access_key: str = "",
-        wake_word: str = "jarvis",
-        wake_word_path: str = None,
+        wake_word: str = "michael",
+        wake_word_path: str = os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
         wake_sensitivity: float = 0.65,
         whisper_model: str = "base",
         sample_rate: int = 16000,
@@ -400,12 +400,13 @@ if __name__ == "__main__":
     pipeline = VoicePipeline(
         logger=TELEMETRY,
         picovoice_access_key=ACCESS_KEY,
-        wake_word="jarvis",
+        wake_word="michael",
+        wake_word_path=os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
         whisper_model="small",   # base is too inaccurate; small handles accents better
         vad_aggressiveness=1,    # 2 was too aggressive; 1 catches more speech frames
     )
 
-    print("Voice Assistant ready! Say 'jarvis' + command...\n")
+    print("Voice Assistant ready! Say 'michael' + command...\n")
 
     try:
         pipeline.run(on_command=handle_command)
