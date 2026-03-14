@@ -17,7 +17,7 @@ load_dotenv()
 class GeminiConfig:
     """Gemini API settings."""
     api_key: str          = os.getenv("GEMINI_API_KEY", "")
-    model: str            = "gemini-1.5-flash"  # Fast and low-cost for short classification
+    model: str            = "models/gemini-2.0-flash"  # Fast and low-cost for short classification
     max_tokens: int       = 10                   # Intent = 1 word only
     temperature: float    = 0.0                 # Deterministic output
     request_timeout: int  = 15                  # Seconds before timeout

@@ -131,24 +131,23 @@ class IntentClassifier:
             raise APIKeyMissingError()
 
         try:
-            import google.generativeai as genai
+            from google import genai
 
-            genai.configure(api_key=self._cfg.api_key)
-            model = genai.GenerativeModel(self._cfg.model)
-
-            response = model.generate_content(
-                [
+            client = genai.Client(api_key=self._cfg.api_key)
+            
+            response = client.models.generate_content(
+                model=self._cfg.model,
+                contents=[
                     LLM_SYSTEM_PROMPT,
                     f"User command: {text}",
                 ],
-                generation_config=genai.GenerationConfig(
+                config=genai.types.GenerateContentConfig(
                     temperature=self._cfg.temperature,
                     max_output_tokens=self._cfg.max_tokens,
                 ),
-                request_options={"timeout": self._cfg.request_timeout},
             )
-
-            raw = ((getattr(response, "text", "") or "").strip().upper())
+            
+            raw = response.text.strip().upper() if response.text else ""
             logger.debug("Gemini raw response: '%s'", raw)
 
             detected = next(

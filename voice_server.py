@@ -1,6 +1,8 @@
 """
 Integrated Voice Assistant Server
 Combines VoicePipeline from my_main.py with WebSocket server for Electron frontend.
+
+Improved: Better error handling, logging, and configuration support.
 """
 
 import asyncio
@@ -10,6 +12,7 @@ import re
 import tempfile
 import time
 import threading
+import logging
 import numpy as np
 import scipy.io.wavfile as wav
 import websockets
@@ -18,10 +21,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+_logger = logging.getLogger(__name__)
+
 # ── Voice components ─────────────────────────────────────────────────────
 from voice.vad import VAD
 from voice.wake_word import WakeWordDetector
 from voice.asr import WhisperASR
+from voice.config import voice_config
 
 # ── Intent + Action system ─────────────────────────────────────────────
 from intent.parser import IntentParser
@@ -39,13 +47,15 @@ def speak(text: str) -> None:
         tts = pyttsx3.init()
         tts.say(text)
         tts.runAndWait()
-    except Exception:
+    except Exception as e:
+        _logger.debug(f"TTS unavailable: {e}")
         print(f"[TTS] {text}")
 
 
 class VoicePipeline:
     """
     Full pipeline: Mic → VAD → Wake Word → ASR → (Intent → Action)
+    Improved: Better error handling and configuration.
     """
 
     def __init__(
@@ -58,6 +68,7 @@ class VoicePipeline:
         whisper_model: str = "base.en",
         sample_rate: int = 16000,
         vad_aggressiveness: int = 1,
+        vad_enable_noise_suppression: bool = True,
         followup_window_sec: int = 20,
     ):
         self.logger = logger
@@ -68,27 +79,45 @@ class VoicePipeline:
 
         print("[Pipeline] Initializing components...")
 
-        self.vad = VAD(
-            logger=logger,
-            sample_rate=sample_rate,
-            aggressiveness=vad_aggressiveness
-        )
+        try:
+            self.vad = VAD(
+                logger=logger,
+                sample_rate=sample_rate,
+                aggressiveness=vad_aggressiveness,
+                enable_noise_suppression=vad_enable_noise_suppression
+            )
+            print("[Pipeline] ✓ VAD initialized")
+        except Exception as e:
+            _logger.error(f"VAD initialization failed: {e}")
+            raise
 
-        self.wake_word = WakeWordDetector(
-            logger=logger,
-            access_key=picovoice_access_key,
-            keyword=wake_word,
-            keyword_path=wake_word_path,
-            sensitivity=wake_sensitivity
-        )
+        try:
+            self.wake_word = WakeWordDetector(
+                logger=logger,
+                access_key=picovoice_access_key,
+                keyword=wake_word,
+                keyword_path=wake_word_path,
+                sensitivity=wake_sensitivity
+            )
+            print("[Pipeline] ✓ Wake word detector initialized")
+        except Exception as e:
+            _logger.error(f"Wake word initialization failed: {e}")
+            raise
 
-        self.asr = WhisperASR(
-            logger=logger,
-            model_size=whisper_model,
-            sample_rate=sample_rate
-        )
+        try:
+            self.asr = WhisperASR(
+                logger=logger,
+                model_size=whisper_model,
+                sample_rate=sample_rate
+            )
+            print("[Pipeline] ✓ ASR initialized")
+        except Exception as e:
+            _logger.error(f"ASR initialization failed: {e}")
+            raise
 
         print("[Pipeline] ✅ All components ready.")
+        print(f"[Pipeline] Configuration: aggressiveness={vad_aggressiveness}, "
+              f"model={whisper_model}, wake_word='{wake_word}'")
         print(f"[Pipeline] Say '{wake_word}' to activate.\n")
 
     def _audio_to_wav(self, audio: np.ndarray) -> str:

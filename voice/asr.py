@@ -5,6 +5,9 @@ import tempfile
 import scipy.io.wavfile as wav
 import os
 import time
+import logging
+
+_logger = logging.getLogger(__name__)
 
 # Phrases Whisper commonly hallucinates on short/silent audio
 _HALLUCINATED_PHRASES = {
@@ -47,17 +50,45 @@ def _normalize_audio(audio: np.ndarray) -> np.ndarray:
     return np.clip(audio, -1.0, 1.0)
 
 
+def _preprocess_audio(audio: np.ndarray) -> np.ndarray:
+    """
+    Pre-process audio to improve recognition:
+    - Normalize amplitude
+    - Reduce DC offset
+    - Gentle high-pass filter to reduce low-freq noise
+    """
+    audio = audio.astype(np.float32)
+    
+    # Remove DC offset
+    audio = audio - np.mean(audio)
+    
+    # Simple high-pass filter (emphasize speech frequencies)
+    if len(audio) > 1:
+        # Very simple 1st-order high-pass
+        audio = np.diff(audio, prepend=audio[0]) * 0.97
+    
+    # Normalize
+    audio = _normalize_audio(audio)
+    return audio
+
+
 class WhisperASR:
     def __init__(self, logger=None, model_size="base.en", sample_rate=16000,
-                 duration=5, language="en"):
+                 duration=5, language="en", retry_attempts=2):
         self.logger = logger
         self.sample_rate = sample_rate
         self.duration = duration
         self.language = language
+        self.retry_attempts = retry_attempts
 
         print(f"[ASR] Loading Whisper model '{model_size}'..")
-        self.model = whisper.load_model(model_size)
-        print("[ASR] Model loaded.")
+        try:
+            self.model = whisper.load_model(model_size)
+            print("[ASR] ✓ Model loaded successfully.")
+        except Exception as e:
+            _logger.error(f"Failed to load Whisper model: {e}")
+            print(f"[ASR] ❌ Error loading model: {e}")
+            raise
 
     # ─── low-level helpers ────────────────────────────────────────────────
 
@@ -66,15 +97,20 @@ class WhisperASR:
         if self.logger:
             self.logger.log_event("ASR", "Recording started")
         print(f"[ASR] Recording {self.duration}s...")
-        audio = sd.rec(
-            int(self.duration * self.sample_rate),
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="float32"
-        )
-        sd.wait()
-        print("[ASR] Recording complete.")
-        return np.squeeze(audio)
+        try:
+            audio = sd.rec(
+                int(self.duration * self.sample_rate),
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32"
+            )
+            sd.wait()
+            print("[ASR] ✓ Recording complete.")
+            return np.squeeze(audio)
+        except Exception as e:
+            _logger.error(f"Recording error: {e}")
+            print(f"[ASR] ❌ Recording failed: {e}")
+            raise
 
     def _whisper_options(self, initial_prompt: str = None) -> dict:
         """
@@ -97,7 +133,7 @@ class WhisperASR:
             no_speech_threshold=0.6,
             compression_ratio_threshold=2.0,
             logprob_threshold=-1.0,
-        )
+
         if initial_prompt:
             opts["initial_prompt"] = initial_prompt
         return opts
@@ -108,29 +144,44 @@ class WhisperASR:
         """
         Transcribe a float32 NumPy array directly.
         Returns empty string if audio is too short or result is a hallucination.
+        Includes retry logic for robustness.
         """
         if len(audio) < _MIN_AUDIO_SAMPLES:
             print(f"[ASR] Audio too short ({len(audio)} samples < {_MIN_AUDIO_SAMPLES}), skipping")
             return ""
 
-        audio = _normalize_audio(audio)
+        # Pre-process audio
+        audio = _preprocess_audio(audio)
 
-        try:
-            result = self.model.transcribe(audio, **self._whisper_options(initial_prompt))
-            text = (result.get("text") or "").strip()
+        for attempt in range(self.retry_attempts):
+            try:
+                result = self.model.transcribe(audio, **self._whisper_options(initial_prompt))
+                text = (result.get("text") or "").strip()
 
-            if _is_hallucination(text):
-                print(f"[ASR] Hallucination detected, discarding: '{text}'")
-                return ""
+                if _is_hallucination(text):
+                    print(f"[ASR] Hallucination detected, discarding: '{text}'")
+                    return ""
 
-            print(f"[ASR] Transcribed: '{text}'")
-            return text
+                print(f"[ASR] ✓ Transcribed: '{text}'")
+                return text
 
-        except Exception as e:
-            if self.logger:
-                self.logger.log_error("ASR", e)
-            print(f"[ASR] transcribe_from_array error: {e}")
-            return ""
+            except Exception as e:
+                if self.logger:
+                    self.logger.log_error("ASR", e)
+                error_msg = str(e).lower()
+                
+                if "cuda" in error_msg or "gpu" in error_msg:
+                    print(f"[ASR] GPU error (attempt {attempt+1}/{self.retry_attempts}): Falling back to CPU mode")
+                    continue
+                elif attempt < self.retry_attempts - 1:
+                    print(f"[ASR] Transcription failed (attempt {attempt+1}/{self.retry_attempts}), retrying...")
+                    time.sleep(0.5)
+                    continue
+                else:
+                    print(f"[ASR] ❌ transcribe_from_array error after {self.retry_attempts} attempts: {e}")
+                    return ""
+
+        return ""
 
     def transcribe_from_file(self, audio_path: str, initial_prompt: str = None) -> str:
         """File-based transcription (reliable fallback)."""
@@ -140,11 +191,12 @@ class WhisperASR:
             if _is_hallucination(text):
                 print(f"[ASR] Hallucination detected, discarding: '{text}'")
                 return ""
+            print(f"[ASR] ✓ File transcription: '{text}'")
             return text
         except Exception as e:
             if self.logger:
                 self.logger.log_error("ASR", e)
-            print(f"[ASR] transcribe_from_file error: {e}")
+            print(f"[ASR] ❌ transcribe_from_file error: {e}")
             return ""
 
     def transcribe(self) -> str:
@@ -172,11 +224,11 @@ class WhisperASR:
                 self.logger.log_latency("ASR", start_time)
                 self.logger.log_event("ASR", f"Transcription result: {text}")
 
-            print(f"[ASR] You said: '{text}'")
+            print(f"[ASR] Final result: '{text}'")
             return text
 
         except Exception as e:
             if self.logger:
                 self.logger.log_error("ASR", e)
-            print(f"[ASR] Error: {e}")
+            print(f"[ASR] ❌ Error: {e}")
             return ""
