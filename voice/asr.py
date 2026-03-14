@@ -133,7 +133,7 @@ class WhisperASR:
             no_speech_threshold=0.6,
             compression_ratio_threshold=2.0,
             logprob_threshold=-1.0,
-
+            initial_prompt=initial_prompt)
         if initial_prompt:
             opts["initial_prompt"] = initial_prompt
         return opts

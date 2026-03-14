@@ -17,9 +17,11 @@ from voice.asr import WhisperASR
 from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
 from telemetry.logger import TelemetryLogger
+from rag import RAGPipeline
 
 parser = IntentParser()
 engine = ActionEngine()
+rag_pipeline = RAGPipeline()
 TELEMETRY = None
 
 # Global assistant mode. "normal" = wake-word + command, "dictate" = continuous writing.
@@ -323,9 +325,15 @@ def handle_command(text: str):
         )
 
     try:
+        # ── RAG: normalize after voice detection (strip fillers, clean for intent/actions)
+        cleaned = rag_pipeline.normalize(text)
+        command_text = cleaned if (cleaned and cleaned.strip()) else text
+        if cleaned and cleaned != text:
+            print(f"[RAG] Normalized: '{command_text}'")
+
         # ── Step 1: Intent parsing ─────────────────
         parse_started = time.time()
-        parsed = parser.parse(text)
+        parsed = parser.parse(command_text or "")
         if TELEMETRY:
             TELEMETRY.log_latency("IntentParse", parse_started)
             TELEMETRY.log_event(

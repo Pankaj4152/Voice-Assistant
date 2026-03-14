@@ -35,9 +35,11 @@ from voice.config import voice_config
 from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
 from telemetry.logger import TelemetryLogger
+from rag import RAGPipeline
 
 parser = IntentParser()
 engine = ActionEngine()
+rag_pipeline = RAGPipeline()
 
 
 def speak(text: str) -> None:
@@ -322,7 +324,7 @@ class VoiceAssistantServer:
     # ── Command handler ────────────────────────────────────────────────────────
 
     async def handle_command(self, text: str):
-        """Process a voice command: Intent → Action → Response"""
+        """Process a voice command: RAG normalize → Intent → Action → Response"""
         print("\n" + "═" * 60)
         print(f"🤖 COMMAND RECEIVED: '{text}'")
         command_started = time.time()
@@ -330,11 +332,16 @@ class VoiceAssistantServer:
 
         try:
             await self.send_state("processing")
-            await self.send_transcript(text)   # show what was heard in the HUD
+            # RAG: strip filler words and normalize for intent/action_engine
+            cleaned = rag_pipeline.normalize(text)
+            command_text = cleaned if (cleaned and cleaned.strip()) else text
+            if cleaned and cleaned != text:
+                print(f"[RAG] Normalized: '{command_text}'")
+            await self.send_transcript(command_text or "(no command)")
 
             # ── Step 1: Intent parsing ─────────────────
             parse_started = time.time()
-            parsed = parser.parse(text)
+            parsed = parser.parse(command_text or "")
             self.telemetry.log_latency("IntentParse", parse_started)
             self.telemetry.log_event(
                 "Intent",
