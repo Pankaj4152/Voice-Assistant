@@ -18,8 +18,8 @@ _HALLUCINATED_PHRASES = {
     "transcribed by", "translated by",
 }
 
-# Minimum voiced audio length to attempt transcription (0.5 seconds)
-_MIN_AUDIO_SAMPLES = 8000  # at 16kHz
+# Minimum voiced audio length to attempt transcription (0.3 seconds)
+_MIN_AUDIO_SAMPLES = 4800  # at 16kHz
 
 
 def _is_hallucination(text: str) -> bool:
@@ -55,17 +55,23 @@ def _preprocess_audio(audio: np.ndarray) -> np.ndarray:
     Pre-process audio to improve recognition:
     - Normalize amplitude
     - Reduce DC offset
-    - Gentle high-pass filter to reduce low-freq noise
+    - Gentle 1st-order IIR high-pass to reduce low-freq rumble
+      (replaces the previous np.diff approach which was too aggressive
+      and was distorting mid/low speech frequencies)
     """
     audio = audio.astype(np.float32)
     
     # Remove DC offset
     audio = audio - np.mean(audio)
     
-    # Simple high-pass filter (emphasize speech frequencies)
+    # Gentle 1st-order IIR high-pass filter (cutoff ~80 Hz at 16kHz)
+    # y[n] = 0.97 * (y[n-1] + x[n] - x[n-1])  — preserves speech, removes rumble
     if len(audio) > 1:
-        # Very simple 1st-order high-pass
-        audio = np.diff(audio, prepend=audio[0]) * 0.97
+        filtered = np.zeros_like(audio)
+        filtered[0] = audio[0]
+        for i in range(1, len(audio)):
+            filtered[i] = 0.97 * (filtered[i - 1] + audio[i] - audio[i - 1])
+        audio = filtered
     
     # Normalize
     audio = _normalize_audio(audio)
@@ -130,9 +136,9 @@ class WhisperASR:
             language=self.language,
             temperature=0,
             condition_on_previous_text=False,
-            no_speech_threshold=0.6,
-            compression_ratio_threshold=2.0,
-            logprob_threshold=-1.0,
+            no_speech_threshold=0.75,   # raised from 0.6 — less eager to reject speech
+            compression_ratio_threshold=2.4,
+            logprob_threshold=-1.5,)      # lowered from -1.0 — accept weaker transcriptions
 
         if initial_prompt:
             opts["initial_prompt"] = initial_prompt

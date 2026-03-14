@@ -22,25 +22,26 @@ class VADConfig:
     """Voice Activity Detection settings."""
     # 0-3: 0 = least filtering (catch more), 3 = most filtering (strict)
     # Lower = more sensitive to voice, but may pick up background noise
-    aggressiveness: int = 1
+    aggressiveness: int = 0
     
     # Frame size (ms): 10, 20, or 30
     frame_duration_ms: int = 30
     
     # Silence padding after speech detection (ms)
-    padding_duration_ms: int = 500
+    # Increased to 700ms so trailing words aren't cut off
+    padding_duration_ms: int = 700
     
     # Minimum speech segment length (ms) before sending upstream
     # Lower = catch short commands, Higher = filter out noise
-    min_segment_ms: int = 350
+    min_segment_ms: int = 250
     
     # Ratio of voiced frames to trigger recording start (0.0-1.0)
     # Lower = starts recording sooner, Higher = waits for more confident speech
-    start_trigger_ratio: float = 0.5
+    start_trigger_ratio: float = 0.35
     
     # Ratio of unvoiced frames to end recording (0.0-1.0)
     # Lower = stops quicker, Higher = waits longer for pauses
-    end_trigger_ratio: float = 0.7
+    end_trigger_ratio: float = 0.65
     
     # Enable noise suppression (removes low-amplitude audio)
     enable_noise_suppression: bool = True
@@ -71,8 +72,8 @@ class WakeWordConfig:
     """Wake word detection settings."""
     # Built-in keywords: jarvis, alexa, hey google, hey siri, ok google, etc.
     # Or custom keyword path for .ppn files
-    keyword: str = "jarvis"
-    keyword_path: Optional[str] = None
+    keyword: str = "michael"
+    keyword_path: Optional[str] = os.path.join(os.path.dirname(__file__), "michael_en_windows_v4_0_0.ppn")
     
     # Sensitivity (0.0-1.0): 0 = conservative, 1.0 = aggressive
     # Higher = more false positives, Lower = misses wake words
