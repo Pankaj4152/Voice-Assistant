@@ -90,10 +90,10 @@ class WhisperASR:
         print(f"[ASR] Loading Whisper model '{model_size}'..")
         try:
             self.model = whisper.load_model(model_size)
-            print("[ASR] ✓ Model loaded successfully.")
+            print("[ASR]  Model loaded successfully.")
         except Exception as e:
             _logger.error(f"Failed to load Whisper model: {e}")
-            print(f"[ASR] ❌ Error loading model: {e}")
+            print(f"[ASR]  Error loading model: {e}")
             raise
 
     # ─── low-level helpers ────────────────────────────────────────────────
@@ -111,11 +111,11 @@ class WhisperASR:
                 dtype="float32"
             )
             sd.wait()
-            print("[ASR] ✓ Recording complete.")
+            print("[ASR] Recording complete.")
             return np.squeeze(audio)
         except Exception as e:
             _logger.error(f"Recording error: {e}")
-            print(f"[ASR] ❌ Recording failed: {e}")
+            print(f"[ASR] Recording failed: {e}")
             raise
 
     def _whisper_options(self, initial_prompt: str = None) -> dict:
@@ -136,17 +136,13 @@ class WhisperASR:
             language=self.language,
             temperature=0,
             condition_on_previous_text=False,
-<<<<<<< HEAD
             no_speech_threshold=0.6,
             compression_ratio_threshold=2.0,
             logprob_threshold=-1.0,
             initial_prompt=initial_prompt)
-=======
-            no_speech_threshold=0.75,   # raised from 0.6 — less eager to reject speech
-            compression_ratio_threshold=2.4,
-            logprob_threshold=-1.5,)      # lowered from -1.0 — accept weaker transcriptions
+               # lowered from -1.0 — accept weaker transcriptions
+                # lowered from -1.0 — accept weaker transcriptions
 
->>>>>>> 4ecde222a9d3450a92613738612262fc17e39ae2
         if initial_prompt:
             opts["initial_prompt"] = initial_prompt
         return opts
@@ -175,7 +171,7 @@ class WhisperASR:
                     print(f"[ASR] Hallucination detected, discarding: '{text}'")
                     return ""
 
-                print(f"[ASR] ✓ Transcribed: '{text}'")
+                print(f"[ASR]  Transcribed: '{text}'")
                 return text
 
             except Exception as e:
@@ -191,7 +187,7 @@ class WhisperASR:
                     time.sleep(0.5)
                     continue
                 else:
-                    print(f"[ASR] ❌ transcribe_from_array error after {self.retry_attempts} attempts: {e}")
+                    print(f"[ASR]  transcribe_from_array error after {self.retry_attempts} attempts: {e}")
                     return ""
 
         return ""
@@ -204,12 +200,12 @@ class WhisperASR:
             if _is_hallucination(text):
                 print(f"[ASR] Hallucination detected, discarding: '{text}'")
                 return ""
-            print(f"[ASR] ✓ File transcription: '{text}'")
+            print(f"[ASR]  File transcription: '{text}'")
             return text
         except Exception as e:
             if self.logger:
                 self.logger.log_error("ASR", e)
-            print(f"[ASR] ❌ transcribe_from_file error: {e}")
+            print(f"[ASR]  transcribe_from_file error: {e}")
             return ""
 
     def transcribe(self) -> str:
@@ -243,5 +239,5 @@ class WhisperASR:
         except Exception as e:
             if self.logger:
                 self.logger.log_error("ASR", e)
-            print(f"[ASR] ❌ Error: {e}")
+            print(f"[ASR]  Error: {e}")
             return ""
