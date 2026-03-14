@@ -101,9 +101,9 @@ def run():
     print(f"  Rule hit : {total - llm_used} times (free, instant)\n")
 
     if failed == 0:
-        print("  ✅ All tests passed!\n")
+        print("   All tests passed!\n")
     else:
-        print(f"  ⚠️  {failed} test(s) failed — check constants.py patterns\n")
+        print(f"    {failed} test(s) failed — check constants.py patterns\n")
 
 
 if __name__ == "__main__":

@@ -117,7 +117,7 @@ class VoicePipeline:
             _logger.error(f"ASR initialization failed: {e}")
             raise
 
-        print("[Pipeline] ✅ All components ready.")
+        print("[Pipeline]  All components ready.")
         print(f"[Pipeline] Configuration: aggressiveness={vad_aggressiveness}, "
               f"model={whisper_model}, wake_word='{wake_word}'")
         print(f"[Pipeline] Say '{wake_word}' to activate.\n")
@@ -172,7 +172,7 @@ class VoicePipeline:
                         self._listening_for_command = True
                     else:
                         if self.wake_word.detect(audio_chunk):
-                            print("[Pipeline] ✅ Wake word detected — now listening for command...")
+                            print("[Pipeline]  Wake word detected — now listening for command...")
                             self._listening_for_command = True
                 else:
                     print("[Pipeline] 🧠 Processing command...")
