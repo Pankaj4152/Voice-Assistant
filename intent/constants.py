@@ -17,7 +17,12 @@ ALL_INTENTS = [INTENT_DOCS, INTENT_BROWSER, INTENT_OS, INTENT_AI]
 INTENT_PATTERNS: dict[str, list[str]] = {
 
     INTENT_DOCS: [
-        r"\b(create|new|open|make)\b.*(document|doc|file|report|note)",
+        # Document-centric commands (avoid generic 'file' so OS/file-explorer
+        # commands like "open file explorer" route to the OS intent instead).
+        # Only treat "open" as DOCS when it's clearly about a single document,
+        # not a folder like "open documents" or "open downloads".
+        r"\b(create|new|make)\b.*(document(s)?|docx?|report|note(s)?)",
+        r"\bopen\b.*\b(new|a|the)\s+(document(s)?|docx?|report|note(s)?)",
         r"\b(write|type|dictate|insert|append)\b",
         r"\b(bold|italic|underline|heading|font|format)\b",
         r"\b(save|export)\b.*(pdf|docx|txt|document)",
@@ -46,6 +51,11 @@ INTENT_PATTERNS: dict[str, list[str]] = {
     ],
 
     INTENT_OS: [
+        # File explorer / known folders
+        r"\b(open|go to|navigate|show)\b.*\b(file explorer|file manager|explorer)\b",
+        r"\b(open|go to|navigate|show)\b.*\b(downloads?|documents?|desktop|pictures?|photos?|music|videos?|movies?)\b",
+
+        # General app / OS controls
         r"\b(open|launch|start|run)\b.*(app|application|program|software|notepad|vscode|calculator|terminal|explorer|chrome|firefox)",
         r"\b(switch|focus)\s+to\s+(notepad|vscode|vs code|calculator|terminal|explorer|chrome|edge|firefox|settings|task manager|word|excel|powerpoint|spotify|zoom|slack|teams|discord)\b",
         r"\b(close|quit|exit|kill)\b.*(app|window|program|tab)",

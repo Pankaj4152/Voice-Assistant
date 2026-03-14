@@ -155,6 +155,8 @@ def _discover_action_keywords() -> Set[str]:
         "stopwatch", "screenshot", "music", "youtube", "search", "open",
         "launch", "start", "run", "close", "mute", "unmute", "read", "write",
         "dictation", "screen", "page", "dictate",
+        # Common folders so phrases like "open documents" survive normalization
+        "documents", "downloads", "desktop", "pictures", "photos", "videos",
     }
     keywords.update(known)
     return keywords

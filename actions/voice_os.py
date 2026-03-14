@@ -123,6 +123,8 @@ class OSActions:
             return self.restart()
         if action == "sleep":
             return self.sleep()
+        if action == "camera_capture":
+            return self.camera_capture()
 
         return {
             "success": False,
@@ -576,25 +578,25 @@ class OSActions:
         "obsidian":         "obsidian.exe",
     }
 
-    def launch_app(self, entities):
-        app = (entities.get("app") or "").strip().lower()
-        if not app:
-            return {"success": False, "response_text": "No app specified"}
-        try:
-            target = self._LAUNCH_MAP.get(app, app)
-            # If the target is an absolute path, check it exists before launching
-            if os.path.isabs(target) and not os.path.exists(target):
-                logger.warning("App path not found: %s", target)
-                return {
-                    "success": False,
-                    "response_text": f"Could not find {app} on this computer. It may not be installed.",
-                }
-            subprocess.Popen(f'start "" "{target}"', shell=True)
-            logger.info("Launched: %s -> %s", app, target)
-            return {"success": True, "response_text": f"Opening {app}"}
-        except Exception as e:
-            logger.error("Launch failed: %s", e)
-            return {"success": False, "response_text": f"Failed to launch {app}"}
+    # def launch_app(self, entities):
+    #     app = (entities.get("app") or "").strip().lower()
+    #     if not app:
+    #         return {"success": False, "response_text": "No app specified"}
+    #     try:
+    #         target = self._LAUNCH_MAP.get(app, app)
+    #         # If the target is an absolute path, check it exists before launching
+    #         if os.path.isabs(target) and not os.path.exists(target):
+    #             logger.warning("App path not found: %s", target)
+    #             return {
+    #                 "success": False,
+    #                 "response_text": f"Could not find {app} on this computer. It may not be installed.",
+    #             }
+    #         subprocess.Popen(f'start "" "{target}"', shell=True)
+    #         logger.info("Launched: %s -> %s", app, target)
+    #         return {"success": True, "response_text": f"Opening {app}"}
+    #     except Exception as e:
+    #         logger.error("Launch failed: %s", e)
+    #         return {"success": False, "response_text": f"Failed to launch {app}"}
 
     def _window_match_tokens(self, app: str):
         return self._WINDOW_TOKENS.get(app, [app])
@@ -732,6 +734,143 @@ class OSActions:
         except Exception as e:
             logger.error("Sleep failed: %s", e)
             return {"success": False, "response_text": "Failed to sleep."}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CAMERA & APP LAUNCH (timeout-safe)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def camera_capture(self):
+        """
+        Open the Windows Camera app (if needed) and take a photo.
+        Uses the Space-bar shutter shortcut built into the Windows Camera app.
+        Separate from "open camera" — this both opens AND clicks the shutter.
+        """
+        try:
+            import pyautogui
+            import pygetwindow as gw
+            import win32gui
+            import win32con
+            import win32process
+            import ctypes
+
+            CAMERA_URI = "microsoft.windows.camera:"
+            WINDOW_TOKENS = ["camera", "windows camera"]
+            OPEN_TIMEOUT = 8    # seconds to wait for the window to appear
+            FOCUS_DELAY = 0.8   # seconds after focusing before pressing shutter
+
+            def _find_camera_window():
+                for w in gw.getAllWindows():
+                    title = (w.title or "").lower()
+                    if any(tok in title for tok in WINDOW_TOKENS):
+                        return w
+                return None
+
+            win = _find_camera_window()
+
+            if win is None:
+                subprocess.Popen(f'start "" "{CAMERA_URI}"', shell=True)
+                logger.info("camera_capture: launched camera app, waiting for window…")
+                deadline = time.time() + OPEN_TIMEOUT
+                while time.time() < deadline:
+                    win = _find_camera_window()
+                    if win:
+                        break
+                    time.sleep(0.4)
+
+            if win is None:
+                logger.warning("camera_capture: camera window did not appear within %ds", OPEN_TIMEOUT)
+                return {
+                    "success": False,
+                    "response_text": "Camera didn't open in time. Please try again.",
+                }
+
+            try:
+                hwnd = win._hWnd
+                if win32gui.IsIconic(hwnd):
+                    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+
+                fg_hwnd = win32gui.GetForegroundWindow()
+                fg_tid = win32process.GetWindowThreadProcessId(fg_hwnd)[0]
+                tgt_tid = win32process.GetWindowThreadProcessId(hwnd)[0]
+                cur_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+
+                attached = []
+                for tid in (fg_tid, tgt_tid):
+                    if tid and tid != cur_tid:
+                        ctypes.windll.user32.AttachThreadInput(cur_tid, tid, True)
+                        attached.append(tid)
+
+                win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                win32gui.SetForegroundWindow(hwnd)
+                win32gui.BringWindowToTop(hwnd)
+
+                for tid in attached:
+                    ctypes.windll.user32.AttachThreadInput(cur_tid, tid, False)
+            except Exception as focus_err:
+                logger.warning("camera_capture: focus via win32 failed (%s), trying window.activate()", focus_err)
+                try:
+                    win.activate()
+                except Exception:
+                    pass
+
+            time.sleep(FOCUS_DELAY)
+            pyautogui.press("space")
+            logger.info("camera_capture: shutter fired")
+            return {"success": True, "response_text": "Photo taken!"}
+
+        except Exception as e:
+            logger.error("camera_capture failed: %s", e)
+            return {"success": False, "response_text": "Failed to take photo."}
+
+    def launch_app(self, entities):
+        """
+        Launch an application by name using Windows shell.
+        Uses a background thread + join-timeout so a hung shell call
+        never freezes the assistant — control returns after `timeout` seconds.
+        """
+        app = (entities.get("app") or "").strip().lower()
+        timeout = int(entities.get("timeout", 10))   # default 10 s, set by parser
+
+        if not app:
+            return {"success": False, "response_text": "No app specified."}
+
+        target = self._LAUNCH_MAP.get(app, app)
+
+        # Reject missing absolute paths immediately — no need to even try
+        if os.path.isabs(target) and not os.path.exists(target):
+            logger.warning("launch_app: path not found: %s", target)
+            return {
+                "success": False,
+                "response_text": f"Could not find {app}. It may not be installed.",
+            }
+
+        result = {"success": False, "response_text": f"Launching {app} timed out."}
+        error_holder = [None]
+
+        def _do_launch():
+            try:
+                subprocess.Popen(f'start "" "{target}"', shell=True)
+                result["success"] = True
+                result["response_text"] = f"Opening {app}"
+            except Exception as exc:
+                error_holder[0] = exc
+
+        import threading
+
+        thread = threading.Thread(target=_do_launch, daemon=True)
+        thread.start()
+        thread.join(timeout=timeout)
+
+        if thread.is_alive():
+            logger.error("launch_app: timed out after %ds launching '%s'", timeout, app)
+            return {"success": False, "response_text": f"Opening {app} is taking too long. Skipping."}
+
+        if error_holder[0]:
+            logger.error("launch_app: exception launching '%s': %s", app, error_holder[0])
+            return {"success": False, "response_text": f"Failed to launch {app}."}
+
+        logger.info("launch_app: launched '%s' → '%s'", app, target)
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # BRIGHTNESS

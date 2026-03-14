@@ -142,7 +142,8 @@ class VoicePipeline:
     _INITIAL_PROMPT = (
         "Open chrome, open YouTube, play music, pause, stop, volume up, volume down, "
         "set a timer, search for, close window, open settings, take screenshot, "
-        "what time is it, open notepad, open file explorer"
+        "what time is it, open notepad, open file explorer, open documents folder, "
+        "open downloads folder, open desktop, open d drive"
     )
 
     def _transcribe_array(self, audio: np.ndarray) -> str:

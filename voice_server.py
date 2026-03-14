@@ -145,7 +145,8 @@ class VoicePipeline:
         "what is volume, what is battery status, check wifi status, am i online, "
         "what is on screen, describe screen, where am i, environment status report, "
         "set a timer, search for, close window, open settings, take screenshot, "
-        "what time is it, open notepad, open file explorer"
+        "what time is it, open notepad, open file explorer, open documents folder, "
+        "open downloads folder, open desktop, open d drive"
     )
 
     def _transcribe_array(self, audio: np.ndarray) -> str:

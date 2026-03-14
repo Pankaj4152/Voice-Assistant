@@ -1,5 +1,4 @@
 
-
 import re
 import logging
 from typing import Optional
@@ -67,6 +66,88 @@ class IntentParser:
         }
         fn = extractors.get(intent)
         return fn(text) if fn else {}
+
+    # ──────────────────────────────────────────────────────────────────
+    # PRIVATE — FILE PATH HELPER
+    # ──────────────────────────────────────────────────────────────────
+
+    # Common user folder aliases — resolved at match time
+    _FOLDER_ALIASES = {
+        "desktop":      r"%USERPROFILE%\Desktop",
+        "downloads":    r"%USERPROFILE%\Downloads",
+        "download":     r"%USERPROFILE%\Downloads",
+        "documents":    r"%USERPROFILE%\Documents",
+        "document":     r"%USERPROFILE%\Documents",
+        "docs":         r"%USERPROFILE%\Documents",
+        "my documents": r"%USERPROFILE%\Documents",
+        "pictures":     r"%USERPROFILE%\Pictures",
+        "photos":       r"%USERPROFILE%\Pictures",
+        "music":        r"%USERPROFILE%\Music",
+        "songs":        r"%USERPROFILE%\Music",
+        "videos":       r"%USERPROFILE%\Videos",
+        "movies":       r"%USERPROFILE%\Videos",
+        "temp":         r"%TEMP%",
+        "appdata":      r"%APPDATA%",
+        "home":         r"%USERPROFILE%",
+    }
+
+    def _extract_file_target(self, text: str) -> dict:
+        """
+        Parse file/folder references from text.
+
+        Returns a dict with subset of:
+            action       : open_path | open_special_folder | open_explorer
+            path         : raw path string (absolute or relative)
+            folder_name  : matched alias key (for open_special_folder)
+            drive        : drive letter (e.g. "C:")
+        """
+        t = text.lower()
+        e: dict = {}
+
+        # ── 1. Absolute / relative path (C:\..., /home/..., ~\..., %VAR%\...) ──
+        path_match = re.search(
+            r'(?:[a-zA-Z]:\\[\w\s\-\\./]+|/[\w\s\-/]+|~[\\/][\w\s\-\\/]+|%\w+%[\\/][\w\s\-\\/]+)',
+            text
+        )
+        if path_match:
+            e["action"] = "open_path"
+            e["path"]   = path_match.group(0).strip()
+            return e
+
+        # ── 2. Drive letter only ("open D drive", "go to E:") ──
+        drive_match = re.search(r'\b([a-zA-Z])[\s:]*\s*(?:drive|disk|partition)\b', t)
+        if drive_match:
+            e["action"] = "open_explorer"
+            e["drive"]  = drive_match.group(1).upper() + ":\\"
+            return e
+
+        # ── 3. Named special folder (downloads, desktop, etc.) ──
+        for alias in sorted(self._FOLDER_ALIASES.keys(), key=len, reverse=True):
+            if alias in t:
+                e["action"]      = "open_special_folder"
+                e["folder_name"] = alias
+                return e
+
+        # ── 4. Generic "open <name>" where name looks like a file/folder ──
+        #    Catches: "open resume.pdf", "open project folder", "open my notes"
+        file_match = re.search(
+            r'\b(?:open|show|go to|navigate to|browse)\b\s+(?:my\s+)?(?:the\s+)?(.+?)(?:\s+(?:file|folder|directory|document))?$',
+            t
+        )
+        if file_match:
+            candidate = file_match.group(1).strip()
+            # Reject single common words that are app names, not paths
+            _NOT_FILES = {
+                "chrome", "edge", "firefox", "settings", "calculator", "notepad",
+                "terminal", "spotify", "task manager", "camera", "store", "app",
+                "application", "browser", "youtube", "google", "instagram", "facebook",
+            }
+            if candidate and candidate not in _NOT_FILES:
+                e["action"] = "open_path"
+                e["path"]   = candidate
+                return e
+
+        return e
 
     # ──────────────────────────────────────────────────────────────────
     # PRIVATE — DOCS
@@ -160,7 +241,6 @@ class IntentParser:
         if m := re.search(r"(https?://\S+|www\.\S+|\b\w+\.(com|org|net|io|in)\b)", t):
             e["url"] = m.group(0)
         elif e.get("action") == "open":
-            # Common site shortcuts (when user says just "youtube", "google", etc.)
             if "youtube" in t:
                 e["url"] = "https://www.youtube.com"
             elif "google" in t:
@@ -172,7 +252,7 @@ class IntentParser:
             elif "instagram" in t:
                 e["url"] = "https://www.instagram.com"
 
-        # Browser hint: "on chrome/edge/firefox"
+        # Browser hint
         if m := re.search(r"\b(on|in)\s+(chrome|edge|firefox)\b", t):
             e["browser"] = m.group(2)
 
@@ -189,12 +269,11 @@ class IntentParser:
             e["direction"] = m.group(1)
         if m := re.search(r"(\d+)\s+times?", t):
             e["times"] = int(m.group(1))
-            # Map human "N times" to a scroll amount in pixels
             e["amount"] = 400 * e["times"]
         if m := re.search(r"\btab\s+(\d{1,2})\b", t):
             e["tab_index"] = int(m.group(1))
 
-        # Zoom percentage, e.g. "zoom to 125 percent" or "zoom 90%"
+        # Zoom
         if "zoom" in t:
             if m := re.search(r"\b(\d{2,3})\s*%?", t):
                 pct = max(25, min(int(m.group(1)), 500))
@@ -214,33 +293,59 @@ class IntentParser:
         t = text.lower()
         e: dict = {}
 
-        # Accessibility-focused query actions
-        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(volume|sound)\b", t) or re.search(r"\b(volume|sound)\s+(level|status)\b", t):
+        # ── Explicit File Explorer commands (before generic file parsing) ─────
+        if re.search(r"\b(open|launch|start|run|show)\b.*\b(file explorer|file manager)\b", t) or \
+           re.search(r"\b(file explorer|file manager)\b", t):
+            e["action"] = "open_explorer"
+            return e
+
+        # ── Camera commands (checked before generic launch) ──────────
+        # "open camera" → launch_camera   |   "take photo / click photo" → camera_capture
+        if re.search(r"\b(take|click|capture|snap)\b.*(photo|picture|pic|image|selfie)\b", t) or \
+           re.search(r"\b(photo|picture|pic|selfie)\b", t) and re.search(r"\b(take|click|capture|snap)\b", t):
+            e["action"] = "camera_capture"
+            return e
+
+        if re.search(r"\b(open|launch|start)\b.*\bcamera\b", t) or \
+           re.search(r"\bcamera\b.*\b(open|launch|start)\b", t):
+            e["action"] = "launch"
+            e["app"]    = "camera"
+            e["timeout"] = 8   # seconds before giving up
+            return e
+
+        # ── Accessibility / status queries ────────────────────────────
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(volume|sound)\b", t) or \
+           re.search(r"\b(volume|sound)\s+(level|status)\b", t):
             e["action"] = "volume_status"
             e["target"] = "volume"
             return e
 
-        if re.search(r"\b(describe|explain|read|tell me)\b.*\b(screen|display)\b", t) or re.search(r"\bwhat(?:'s| is)\b.*\bon\b.*\b(screen|display)\b", t):
+        if re.search(r"\b(describe|explain|read|tell me)\b.*\b(screen|display)\b", t) or \
+           re.search(r"\bwhat(?:'s| is)\b.*\bon\b.*\b(screen|display)\b", t):
             e["action"] = "describe_screen"
             e["target"] = "screen"
             return e
 
-        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(battery|charge)\b", t) or re.search(r"\b(battery|charge)\s+(level|status|left|remaining)\b", t):
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(battery|charge)\b", t) or \
+           re.search(r"\b(battery|charge)\s+(level|status|left|remaining)\b", t):
             e["action"] = "battery_status"
             e["target"] = "battery"
             return e
 
-        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(wi\s*-?\s*fi|wifi|wireless)\b", t) or re.search(r"\b(wi\s*-?\s*fi|wifi|wireless)\b.*\b(status|signal|connected|connection|network|ssid)\b", t):
+        if re.search(r"\b(what(?:'s| is)?|current|check)\b.*\b(wi\s*-?\s*fi|wifi|wireless)\b", t) or \
+           re.search(r"\b(wi\s*-?\s*fi|wifi|wireless)\b.*\b(status|signal|connected|connection|network|ssid)\b", t):
             e["action"] = "wifi_status"
             e["target"] = "wifi"
             return e
 
-        if re.search(r"\b(internet|network)\b.*\b(status|connected|working|online)\b", t) or re.search(r"\bam i\s+(online|offline)\b", t):
+        if re.search(r"\b(internet|network)\b.*\b(status|connected|working|online)\b", t) or \
+           re.search(r"\bam i\s+(online|offline)\b", t):
             e["action"] = "network_status"
             e["target"] = "network"
             return e
 
-        if re.search(r"\b(which|what)\s+app\b.*\b(open|active|current)\b", t) or re.search(r"\bwhere\s+am\s+i\b", t):
+        if re.search(r"\b(which|what)\s+app\b.*\b(open|active|current)\b", t) or \
+           re.search(r"\bwhere\s+am\s+i\b", t):
             e["action"] = "active_window_status"
             e["target"] = "window"
             return e
@@ -250,12 +355,21 @@ class IntentParser:
             e["target"] = "datetime"
             return e
 
-        if re.search(r"\b(environment|system)\b.*\b(summary|status|report)\b", t) or re.search(r"\bstatus\s+report\b", t):
+        if re.search(r"\b(environment|system)\b.*\b(summary|status|report)\b", t) or \
+           re.search(r"\bstatus\s+report\b", t):
             e["action"] = "environment_summary"
             e["target"] = "environment"
             return e
 
-        # Special multi-window / global actions first
+        # ── File / folder navigation (before generic launch) ──────────
+        # Triggered by: drive letters, explicit paths, or folder aliases
+        # NOT triggered for single app names (handled by launch_app below)
+        file_entities = self._extract_file_target(text)
+        if file_entities.get("action") in ("open_path", "open_special_folder", "open_explorer"):
+            e.update(file_entities)
+            return e
+
+        # ── Multi-window / global actions ─────────────────────────────
         if re.search(r"\bminimi[sz]e\b.*\ball\b|\bminimi[sz]e all\b", t):
             e["action"] = "minimize_all"
             return e
@@ -263,7 +377,7 @@ class IntentParser:
             e["action"] = "close_all_apps"
             return e
 
-        # Timer / stopwatch
+        # ── Timer / stopwatch ─────────────────────────────────────────
         if "timer" in t:
             if re.search(r"\b(stop|cancel|clear)\b.*\btimer\b|\bstop timer\b|\bcancel timer\b", t):
                 e["action"] = "timer_cancel"
@@ -291,7 +405,7 @@ class IntentParser:
                 e["action"] = "stopwatch_start"
             return e
 
-        # Music (kept in OS so it doesn't route to AI)
+        # ── Music ─────────────────────────────────────────────────────
         if re.search(r"\bplay\b", t):
             if m := re.search(r"\bplay\b\s+(.+?)(\s+on\s+(spotify|youtube)|$)", t):
                 name = m.group(1).strip()
@@ -303,7 +417,7 @@ class IntentParser:
                     e["platform"] = m.group(3)
                 return e
 
-        # Volume / brightness normalization (percent + synonyms)
+        # ── Volume / brightness ───────────────────────────────────────
         if re.search(r"\b(unmute|sound on|speaker on)\b", t):
             e["action"] = "unmute"
             e["target"] = "volume"
@@ -321,12 +435,10 @@ class IntentParser:
                 e["value"] = v
                 return e
             if re.search(r"\b(max|maximum|full|high|loud)\b", t):
-                e["action"] = "set"
-                e["value"] = 100
+                e["action"] = "set"; e["value"] = 100
                 return e
             if re.search(r"\b(low|quiet|soft)\b", t):
-                e["action"] = "set"
-                e["value"] = 20
+                e["action"] = "set"; e["value"] = 20
                 return e
             if re.search(r"\b(up|increase|raise|turn up)\b", t):
                 e["action"] = "increase"
@@ -339,16 +451,13 @@ class IntentParser:
             e["target"] = "brightness"
             if m := re.search(r"(\d{1,3})\s*%?", t):
                 v = max(0, min(int(m.group(1)), 100))
-                e["action"] = "set"
-                e["value"] = v
+                e["action"] = "set"; e["value"] = v
                 return e
             if re.search(r"\b(max|maximum|full|high|bright)\b", t):
-                e["action"] = "set"
-                e["value"] = 100
+                e["action"] = "set"; e["value"] = 100
                 return e
             if re.search(r"\b(low|dim|dark)\b", t):
-                e["action"] = "set"
-                e["value"] = 20
+                e["action"] = "set"; e["value"] = 20
                 return e
             if re.search(r"\b(up|increase|raise|brighter)\b", t):
                 e["action"] = "increase"
@@ -357,47 +466,48 @@ class IntentParser:
                 e["action"] = "decrease"
                 return e
 
+        # ── General OS action map ─────────────────────────────────────
         action_map = {
-            "switch_app": r"\b(switch|focus)\s+to\s+(?!tab\b)",
-            "launch":     r"\b(open|launch|start|run)\b",
-            "close_window": r"\b(close|quit|exit)\b\s+(this|current)?\s*(window|app)\b|\bclose this\b",
-            "close":      r"\b(close|quit|exit|kill)\b",
-            "screenshot": r"\b(screenshot|screen capture|capture screen)\b",
-            "increase":   r"\b(increase|raise)\b.*(volume|brightness)\b",
-            "decrease":   r"\b(decrease|lower|reduce)\b.*(volume|brightness)\b",
-            "set":        r"\b(set|change)\b.*(volume|brightness)\b",
-            "mute":       r"\bmute\b",
-            "unmute":     r"\bunmute\b",
-            "lock":       r"\block\b",
-            "shutdown":   r"\bshutdown\b",
-            "restart":    r"\brestart\b",
-            "sleep":      r"\bsleep\b",
-            "minimize":   r"\bminimize\b",
-            "maximize":   r"\bmaximize\b",
-            "restore":    r"\brestore\b",
-            "switch_window": r"\b(switch|next)\s+(window|app)\b|\balt tab\b",
-            "previous_window": r"\b(previous|last)\s+(window|app)\b|\bback window\b",
-            "task_view":  r"\btask view\b|\bshow tasks\b",
-            "show_desktop": r"\b(show|go to)\s+desktop\b",
-            "new_desktop": r"\b(new|create)\s+(desktop|virtual desktop)\b",
-            "next_desktop": r"\bnext\s+(desktop|virtual desktop)\b",
+            "switch_app":       r"\b(switch|focus)\s+to\s+(?!tab\b)",
+            "launch":           r"\b(open|launch|start|run)\b",
+            "close_window":     r"\b(close|quit|exit)\b\s+(this|current)?\s*(window|app)\b|\bclose this\b",
+            "close":            r"\b(close|quit|exit|kill)\b",
+            "screenshot":       r"\b(screenshot|screen capture|capture screen)\b",
+            "increase":         r"\b(increase|raise)\b.*(volume|brightness)\b",
+            "decrease":         r"\b(decrease|lower|reduce)\b.*(volume|brightness)\b",
+            "set":              r"\b(set|change)\b.*(volume|brightness)\b",
+            "mute":             r"\bmute\b",
+            "unmute":           r"\bunmute\b",
+            "lock":             r"\block\b",
+            "shutdown":         r"\bshutdown\b",
+            "restart":          r"\brestart\b",
+            "sleep":            r"\bsleep\b",
+            "minimize":         r"\bminimize\b",
+            "maximize":         r"\bmaximize\b",
+            "restore":          r"\brestore\b",
+            "switch_window":    r"\b(switch|next)\s+(window|app)\b|\balt tab\b",
+            "previous_window":  r"\b(previous|last)\s+(window|app)\b|\bback window\b",
+            "task_view":        r"\btask view\b|\bshow tasks\b",
+            "show_desktop":     r"\b(show|go to)\s+desktop\b",
+            "new_desktop":      r"\b(new|create)\s+(desktop|virtual desktop)\b",
+            "next_desktop":     r"\bnext\s+(desktop|virtual desktop)\b",
             "previous_desktop": r"\b(previous|last)\s+(desktop|virtual desktop)\b",
-            "close_desktop": r"\bclose\s+(desktop|virtual desktop)\b",
-            "copy":       r"\bcopy\b(?!\b.*(file|folder|directory))",
-            "paste":      r"\bpaste\b(?!\b.*(file|folder|directory))",
-            "cut":        r"\bcut\b(?!\b.*(file|folder|directory))",
-            "select_all": r"\bselect all\b",
-            "copy_file":  r"\bcopy\b.*(file|folder)",
-            "move_file":  r"\bmove\b.*(file|folder)",
-            "delete_file":r"\bdelete\b.*(file|folder)",
-            "rename":     r"\brename\b",
+            "close_desktop":    r"\bclose\s+(desktop|virtual desktop)\b",
+            "copy":             r"\bcopy\b(?!\b.*(file|folder|directory))",
+            "paste":            r"\bpaste\b(?!\b.*(file|folder|directory))",
+            "cut":              r"\bcut\b(?!\b.*(file|folder|directory))",
+            "select_all":       r"\bselect all\b",
+            "copy_file":        r"\bcopy\b.*(file|folder)",
+            "move_file":        r"\bmove\b.*(file|folder)",
+            "delete_file":      r"\bdelete\b.*(file|folder)",
+            "rename":           r"\brename\b",
         }
         for action, pattern in action_map.items():
             if re.search(pattern, t):
                 e["action"] = action
                 break
 
-        # App name (common cases + "open <app>" capture)
+        # ── App name resolution ───────────────────────────────────────
         known_apps = [
             "camera", "calculator", "calc", "notepad", "chrome", "edge", "firefox",
             "terminal", "cmd", "powershell", "explorer", "settings", "task manager",
@@ -409,16 +519,24 @@ class IntentParser:
                 e["app"] = app
                 break
         if "app" not in e:
-            if m := re.search(r"\b(open|launch|start|run|close|quit|exit|switch|focus)\b\s+(?:to\s+)?(.+?)(\s+(app|application|program|window)|$)", t):
+            if m := re.search(
+                r"\b(open|launch|start|run|close|quit|exit|switch|focus)\b\s+(?:to\s+)?(.+?)(\s+(app|application|program|window)|$)",
+                t
+            ):
                 candidate = m.group(2).strip()
                 if candidate:
                     e["app"] = candidate
 
-        # Numeric value e.g. "volume to 70"
+        # ── Timeout guard (prevents system hanging on failed launches) ─
+        # Default 10 s; callers should respect this via threading/subprocess timeout
+        if e.get("action") in ("launch", "switch_app") and "timeout" not in e:
+            e["timeout"] = 10
+
+        # ── Numeric value ─────────────────────────────────────────────
         if m := re.search(r"\bto\s+(\d+)\b", t):
             e["value"] = int(m.group(1))
 
-        # Target system control
+        # ── Target system control ─────────────────────────────────────
         for target in ["volume", "brightness", "wifi", "bluetooth"]:
             if target in t:
                 e["target"] = target
@@ -449,7 +567,6 @@ class IntentParser:
                 e["action"] = action
                 break
 
-        # Target language for translate
         if e["action"] == "translate":
             if m := re.search(r"\bto\s+(\w+)\b", t):
                 e["target_language"] = m.group(1)
