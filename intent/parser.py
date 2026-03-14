@@ -242,6 +242,82 @@ class IntentParser:
             e["target"] = "environment"
             return e
 
+        # ── File navigation ──────────────────────────────────────────────────
+        _FOLDERS = ["downloads", "desktop", "documents", "pictures", "music", "videos", "home"]
+
+        def _pick_folder(text_lower: str) -> str:
+            for f in _FOLDERS:
+                if f in text_lower:
+                    return f
+            m2 = re.search(r"\b(in|inside|of)\s+(?:the\s+)?(\w+)\b", text_lower)
+            return m2.group(2) if m2 else ""
+
+        # list_folder: "show files in downloads" / "list desktop" / "what's in documents"
+        if (re.search(r"\b(list|show)\b.*(files?|folder|contents?|directory)\b", t)
+                or re.search(r"\bwhat(?:'s| is|s)\b.*(in|inside)\b.*(downloads|desktop|documents|pictures|music|videos)\b", t)
+                or re.search(r"\b(list|show)\b\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos)\b", t)):
+            e["action"] = "list_folder"
+            e["folder"] = _pick_folder(t)
+            return e
+
+        # open_folder / go_to_folder: "open downloads" / "navigate to documents" / "go to desktop"
+        if re.search(r"\b(open|navigate to|go to)\b\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos|home)\b", t):
+            e["action"] = "open_folder"
+            e["folder"] = _pick_folder(t)
+            return e
+
+        # find_file: "find report.txt" / "where is budget.xlsx" / "find report on desktop"
+        if m := re.search(r"\b(find|search for|where is|locate)\b\s+(.+)", t):
+            e["action"] = "find_file"
+            raw_query = m.group(2).strip()
+
+            # Optional location suffixes: "in downloads", "on desktop", "inside documents"
+            loc_match = re.search(
+                r"\b(?:in|on|inside)\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos|home)\b",
+                raw_query,
+            )
+            if loc_match:
+                e["folder"] = loc_match.group(1)
+                raw_query = re.sub(
+                    r"\b(?:in|on|inside)\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos|home)\b",
+                    "",
+                    raw_query,
+                ).strip()
+
+            e["filename"] = raw_query
+            return e
+
+        # move_file: "move report.txt to downloads"
+        if m := re.search(r"\bmove\b\s+(.+?)\s+to\s+(\w+)", t):
+            e["action"] = "move_file"
+            e["filename"] = m.group(1).strip()
+            e["dest"] = m.group(2).strip()
+            return e
+
+        # copy_file: "copy report.txt to desktop"
+        if m := re.search(r"\bcopy\b\s+(.+?)\s+to\s+(\w+)", t):
+            e["action"] = "copy_file"
+            e["filename"] = m.group(1).strip()
+            e["dest"] = m.group(2).strip()
+            return e
+
+        # rename_file: "rename report.txt to final.txt"
+        if m := re.search(r"\brename\b\s+(.+?)\s+to\s+(.+)", t):
+            e["action"] = "rename_file"
+            e["filename"] = m.group(1).strip()
+            e["new_name"] = m.group(2).strip()
+            return e
+
+        # delete_file: "delete report.txt" / "remove budget.xlsx"
+        if re.search(r"\b(delete|remove)\b.*(\.\w{2,4}|file\b)", t):
+            e["action"] = "delete_file"
+            if m := re.search(r"\b(?:delete|remove)\b\s+(.+)", t):
+                name = m.group(1).strip()
+                # strip trailing noise words
+                name = re.sub(r"\s+(file|from\s+\w+)$", "", name).strip()
+                e["filename"] = name
+            return e
+
         # Special multi-window / global actions first
         if re.search(r"\bminimi[sz]e\b.*\ball\b|\bminimi[sz]e all\b", t):
             e["action"] = "minimize_all"

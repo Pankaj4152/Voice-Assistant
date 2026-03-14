@@ -80,6 +80,14 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\b(copy|paste|cut|select all)\b",
         r"\b(empty trash|recycle bin)\b",
         r"\b(connect|disconnect)\b.*(wifi|bluetooth|internet)\b",
+        # File navigation
+        r"\b(list|show)\b.*(files?|contents?)\b.*(in|of|on)\b",
+        r"\b(list|show)\b\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos)\b",
+        r"\bwhat(?:'s| is|s)\b.*(in|inside)\b.*(downloads|desktop|documents|pictures|music|videos)\b",
+        r"\b(navigate to|go to|open)\b\s+(?:the\s+)?(downloads|desktop|documents|pictures|music|videos|home)\b",
+        r"\b(find|search for|where is|locate)\b.*(file|\w+\.\w{2,4})",
+        r"\b(move|copy)\b\s+.{3,}\s+to\s+\w+",
+        r"\brename\b\s+.{3,}\s+to\s+.{2,}",
     ],
 
     INTENT_AI: [
