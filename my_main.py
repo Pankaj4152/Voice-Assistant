@@ -17,11 +17,9 @@ from voice.asr import WhisperASR
 from intent.parser import IntentParser
 from actions.action_engine import ActionEngine
 from telemetry.logger import TelemetryLogger
-from rag import RAGPipeline
 
 parser = IntentParser()
 engine = ActionEngine()
-rag_pipeline = RAGPipeline()
 TELEMETRY = None
 
 # Global assistant mode. "normal" = wake-word + command, "dictate" = continuous writing.
@@ -82,8 +80,8 @@ class VoicePipeline:
         self,
         logger=None,
         picovoice_access_key: str = "",
-        wake_word: str = "michael",
-        wake_word_path: str = os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
+        wake_word: str = "jarvis",
+        wake_word_path: str = None,
         wake_sensitivity: float = 0.65,
         whisper_model: str = "base",
         sample_rate: int = 16000,
@@ -325,15 +323,9 @@ def handle_command(text: str):
         )
 
     try:
-        # ── RAG: normalize after voice detection (strip fillers, clean for intent/actions)
-        cleaned = rag_pipeline.normalize(text)
-        command_text = cleaned if (cleaned and cleaned.strip()) else text
-        if cleaned and cleaned != text:
-            print(f"[RAG] Normalized: '{command_text}'")
-
         # ── Step 1: Intent parsing ─────────────────
         parse_started = time.time()
-        parsed = parser.parse(command_text or "")
+        parsed = parser.parse(text)
         if TELEMETRY:
             TELEMETRY.log_latency("IntentParse", parse_started)
             TELEMETRY.log_event(
@@ -400,13 +392,12 @@ if __name__ == "__main__":
     pipeline = VoicePipeline(
         logger=TELEMETRY,
         picovoice_access_key=ACCESS_KEY,
-        wake_word="michael",
-        wake_word_path=os.path.join(os.path.dirname(__file__), "voice", "michael_en_windows_v4_0_0.ppn"),
+        wake_word="jarvis",
         whisper_model="small",   # base is too inaccurate; small handles accents better
         vad_aggressiveness=1,    # 2 was too aggressive; 1 catches more speech frames
     )
 
-    print("Voice Assistant ready! Say 'michael' + command...\n")
+    print("Voice Assistant ready! Say 'jarvis' + command...\n")
 
     try:
         pipeline.run(on_command=handle_command)

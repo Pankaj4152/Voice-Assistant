@@ -39,25 +39,18 @@ class OSActions:
 
         if action == "volume_status":
             return self.general.volume_status()
-
         if action == "describe_screen":
             return self.general.describe_screen()
-
         if action == "battery_status":
             return self.general.battery_status()
-
         if action == "wifi_status":
             return self.general.wifi_status()
-
         if action == "network_status":
             return self.general.network_status()
-
         if action == "active_window_status":
             return self.general.active_window_status()
-
         if action == "date_time_status":
             return self.general.date_time_status()
-
         if action == "environment_summary":
             return self.general.environment_summary()
 
@@ -81,8 +74,13 @@ class OSActions:
 
         if action == "music_play":
             return self.music_play(entities)
+        if action == "open_explorer":
+            return self.open_explorer(entities)
+        if action == "open_special_folder":
+            return self.open_special_folder(entities)
+        if action == "open_path":
+            return self.open_path(entities)
 
-        # Map parsed intent actions to implemented primitives
         if action == "screenshot":
             return self.screenshot()
         if action in ("mute", "unmute"):
@@ -153,118 +151,60 @@ class OSActions:
             "entities": entities,
         }
 
-    # ─────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # SCREENSHOT
+    # ─────────────────────────────────────────────────────────────────────────
 
     def screenshot(self):
-
         try:
             import pyautogui
-
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             name = f"Screenshot_{timestamp}.png"
-
             path = os.path.join(os.getcwd(), name)
-
             img = pyautogui.screenshot()
             img.save(path)
-
             logger.info("Screenshot saved: %s", path)
-
-            return {
-                "success": True,
-                "response_text": f"Screenshot saved as {name}",
-                "path": path
-            }
-
+            return {"success": True, "response_text": f"Screenshot saved as {name}", "path": path}
         except Exception as e:
-
             logger.error("Screenshot failed: %s", e)
+            return {"success": False, "response_text": "Failed to take screenshot"}
 
-            return {
-                "success": False,
-                "response_text": "Failed to take screenshot"
-            }
-
-    # ─────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # VOLUME
+    # ─────────────────────────────────────────────────────────────────────────
 
     def mute(self, mute: bool = True):
-
         try:
             import pyautogui
-            # Toggle mute key (Windows media key). For unmute, same key is used.
             pyautogui.press("volumemute")
-
             logger.info("System mute=%s", mute)
-
-            return {
-                "success": True,
-                "response_text": "Volume muted" if mute else "Volume unmuted",
-            }
-
+            return {"success": True, "response_text": "Volume muted" if mute else "Volume unmuted"}
         except Exception as e:
-
             logger.error("Mute failed: %s", e)
-
-            return {
-                "success": False,
-                "response_text": "Failed to mute volume"
-            }
-
-    # ─────────────────────────────
+            return {"success": False, "response_text": "Failed to mute volume"}
 
     def volume_up(self):
-
         try:
             import pyautogui
             pyautogui.press("volumeup")
-
-            logger.info("Volume increased")
-
-            return {
-                "success": True,
-                "response_text": "Volume increased"
-            }
-
+            return {"success": True, "response_text": "Volume increased"}
         except Exception as e:
-
             logger.error("Volume up failed: %s", e)
-
-            return {
-                "success": False,
-                "response_text": "Failed to increase volume"
-            }
-
-    # ─────────────────────────────
+            return {"success": False, "response_text": "Failed to increase volume"}
 
     def volume_down(self):
-
         try:
             import pyautogui
             pyautogui.press("volumedown")
-
-            logger.info("Volume decreased")
-
-            return {
-                "success": True,
-                "response_text": "Volume decreased"
-            }
-
+            return {"success": True, "response_text": "Volume decreased"}
         except Exception as e:
-
             logger.error("Volume down failed: %s", e)
-
-            return {
-                "success": False,
-                "response_text": "Failed to decrease volume"
-            }
-
-    # ─────────────────────────────
+            return {"success": False, "response_text": "Failed to decrease volume"}
 
     def volume_set(self, value):
         try:
             import pyautogui
             level = max(0, min(int(value), 100))
-            # Approximate: Windows volume steps vary; assume ~2% per keypress.
             for _ in range(60):
                 pyautogui.press("volumedown")
             for _ in range(int(level / 2)):
@@ -274,38 +214,21 @@ class OSActions:
             logger.error("Volume set failed: %s", e)
             return {"success": False, "response_text": "Failed to set volume."}
 
-    def minimize(self):
+    # ─────────────────────────────────────────────────────────────────────────
+    # WINDOW MANAGEMENT
+    # ─────────────────────────────────────────────────────────────────────────
 
+    def minimize(self):
         try:
             import pygetwindow as gw
-
             win = gw.getActiveWindow()
-
             if win:
                 win.minimize()
-
-                logger.info("Window minimized")
-
-                return {
-                    "success": True,
-                    "response_text": "Window minimized"
-                }
-
-            return {
-                "success": False,
-                "response_text": "No active window found"
-            }
-
+                return {"success": True, "response_text": "Window minimized"}
+            return {"success": False, "response_text": "No active window found"}
         except Exception as e:
-
             logger.error("Minimize failed: %s", e)
-
-            return {
-                "success": False,
-                "response_text": "Failed to minimize window"
-            }
-
-    # ─────────────────────────────
+            return {"success": False, "response_text": "Failed to minimize window"}
 
     def minimize_all(self):
         try:
@@ -419,13 +342,17 @@ class OSActions:
             logger.error("Close desktop failed: %s", e)
             return {"success": False, "response_text": "Failed to close current desktop."}
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # CLIPBOARD
+    # ─────────────────────────────────────────────────────────────────────────
+
     def clipboard_shortcut(self, operation: str):
         try:
             import pyautogui
             key_map = {
-                "copy": ("ctrl", "c"),
-                "paste": ("ctrl", "v"),
-                "cut": ("ctrl", "x"),
+                "copy":       ("ctrl", "c"),
+                "paste":      ("ctrl", "v"),
+                "cut":        ("ctrl", "x"),
                 "select_all": ("ctrl", "a"),
             }
             combo = key_map.get(operation)
@@ -433,9 +360,9 @@ class OSActions:
                 return {"success": False, "response_text": "Clipboard action not supported."}
             pyautogui.hotkey(*combo)
             labels = {
-                "copy": "Copied selection.",
-                "paste": "Pasted from clipboard.",
-                "cut": "Cut selection.",
+                "copy":       "Copied selection.",
+                "paste":      "Pasted from clipboard.",
+                "cut":        "Cut selection.",
                 "select_all": "Selected all.",
             }
             return {"success": True, "response_text": labels.get(operation, "Done.")}
@@ -443,33 +370,254 @@ class OSActions:
             logger.error("Clipboard action failed: %s", e)
             return {"success": False, "response_text": "Failed clipboard action."}
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # APP LAUNCH / SWITCH / CLOSE
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Canonical executable / URI map for launch_app
+    _LAUNCH_MAP = {
+        # Browsers
+        "chrome":           "chrome",
+        "google chrome":    "chrome",
+        "edge":             "msedge",
+        "microsoft edge":   "msedge",
+        "firefox":          "firefox",
+        "opera":            "opera",
+        "brave":            "brave",
+
+        # Microsoft Office
+        "word":             "winword",
+        "microsoft word":   "winword",
+        "excel":            "excel",
+        "microsoft excel":  "excel",
+        "powerpoint":       "powerpnt",
+        "ppt":              "powerpnt",
+        "microsoft powerpoint": "powerpnt",
+        "outlook":          "outlook",
+        "microsoft outlook":"outlook",
+        "onenote":          "onenote",
+        "microsoft onenote":"onenote",
+        "teams":            "ms-teams:",
+        "microsoft teams":  "ms-teams:",
+        "access":           "msaccess",
+        "publisher":        "mspub",
+
+        # Dev tools
+        "vscode":           "code",
+        "vs code":          "code",
+        "visual studio code": "code",
+        "visual studio":    "devenv",
+        "terminal":         "wt",
+        "windows terminal": "wt",
+        "cmd":              "cmd",
+        "command prompt":   "cmd",
+        "powershell":       "powershell",
+        "pycharm":          "pycharm64",
+        "intellij":         "idea64",
+        "intellij idea":    "idea64",
+        "android studio":   "studio64",
+        "postman":          "postman",
+        "git bash":         r"C:\Program Files\Git\git-bash.exe",
+
+        # Communication
+        "telegram":         os.path.expandvars(r"%LOCALAPPDATA%\Telegram Desktop\Telegram.exe"),
+        "telegram desktop": os.path.expandvars(r"%LOCALAPPDATA%\Telegram Desktop\Telegram.exe"),
+        "whatsapp":         os.path.expandvars(r"%LOCALAPPDATA%\WhatsApp\WhatsApp.exe"),
+        "discord":          os.path.expandvars(r"%LOCALAPPDATA%\Discord\Update.exe --processStart Discord.exe"),
+        "slack":            os.path.expandvars(r"%LOCALAPPDATA%\slack\slack.exe"),
+        "zoom":             os.path.expandvars(r"%APPDATA%\Zoom\bin\Zoom.exe"),
+        "skype":            "skype:",
+        "signal":           os.path.expandvars(r"%LOCALAPPDATA%\Programs\signal-desktop\Signal.exe"),
+
+        # Media
+        "spotify":          os.path.expandvars(r"%APPDATA%\Spotify\Spotify.exe"),
+        "vlc":              r"C:\Program Files\VideoLAN\VLC\vlc.exe",
+        "media player":     "wmplayer",
+        "windows media player": "wmplayer",
+
+        # System / Utilities
+        "explorer":         "explorer",
+        "file explorer":    "explorer",
+        "task manager":     "taskmgr",
+        "settings":         "ms-settings:",
+        "windows settings": "ms-settings:",
+        "control panel":    "control",
+        "notepad":          "notepad",
+        "notepad++":        r"C:\Program Files\Notepad++\notepad++.exe",
+        "paint":            "mspaint",
+        "mspaint":          "mspaint",
+        "calculator":       "calc",
+        "calc":             "calc",
+        "camera":           "microsoft.windows.camera:",
+        "store":            "ms-windows-store:",
+        "microsoft store":  "ms-windows-store:",
+        "snipping tool":    "snippingtool",
+        "snip & sketch":    "ms-screensketch:",
+
+        # Creative / Design
+        "figma":            os.path.expandvars(r"%LOCALAPPDATA%\Figma\Figma.exe"),
+        "blender":          r"C:\Program Files\Blender Foundation\Blender\blender.exe",
+        "photoshop":        r"C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe",
+        "adobe photoshop":  r"C:\Program Files\Adobe\Adobe Photoshop 2024\Photoshop.exe",
+        "illustrator":      r"C:\Program Files\Adobe\Adobe Illustrator 2024\Support Files\Contents\Windows\Illustrator.exe",
+        "adobe illustrator":r"C:\Program Files\Adobe\Adobe Illustrator 2024\Support Files\Contents\Windows\Illustrator.exe",
+        "premiere":         r"C:\Program Files\Adobe\Adobe Premiere Pro 2024\Adobe Premiere Pro.exe",
+        "premiere pro":     r"C:\Program Files\Adobe\Adobe Premiere Pro 2024\Adobe Premiere Pro.exe",
+        "after effects":    r"C:\Program Files\Adobe\Adobe After Effects 2024\Support Files\AfterFX.exe",
+
+        # Productivity
+        "notion":           os.path.expandvars(r"%LOCALAPPDATA%\Programs\Notion\Notion.exe"),
+        "obsidian":         os.path.expandvars(r"%LOCALAPPDATA%\Obsidian\Obsidian.exe"),
+    }
+
+    # Window title tokens map for switch_to_app
+    _WINDOW_TOKENS = {
+        # Browsers
+        "chrome":               ["google chrome", "chrome"],
+        "google chrome":        ["google chrome", "chrome"],
+        "edge":                 ["microsoft edge", "edge"],
+        "microsoft edge":       ["microsoft edge", "edge"],
+        "firefox":              ["firefox", "mozilla firefox"],
+        "opera":                ["opera"],
+        "brave":                ["brave"],
+
+        # Microsoft Office
+        "word":                 ["word", "microsoft word", "winword"],
+        "microsoft word":       ["word", "microsoft word"],
+        "excel":                ["excel", "microsoft excel"],
+        "microsoft excel":      ["excel", "microsoft excel"],
+        "powerpoint":           ["powerpoint", "microsoft powerpoint", "ppt"],
+        "ppt":                  ["powerpoint", "microsoft powerpoint", "ppt"],
+        "microsoft powerpoint": ["powerpoint", "microsoft powerpoint"],
+        "outlook":              ["outlook", "microsoft outlook"],
+        "onenote":              ["onenote", "microsoft onenote"],
+        "teams":                ["microsoft teams", "teams"],
+        "access":               ["microsoft access", "access"],
+        "publisher":            ["microsoft publisher", "publisher"],
+
+        # Dev tools
+        "vscode":               ["visual studio code", "vscode", "code"],
+        "vs code":              ["visual studio code", "vscode", "code"],
+        "visual studio code":   ["visual studio code", "vscode", "code"],
+        "visual studio":        ["visual studio", "devenv"],
+        "terminal":             ["windows terminal", "terminal"],
+        "cmd":                  ["command prompt", "cmd"],
+        "powershell":           ["powershell", "windows powershell"],
+        "pycharm":              ["pycharm"],
+        "intellij":             ["intellij idea", "intellij"],
+        "android studio":       ["android studio"],
+        "postman":              ["postman"],
+
+        # Communication
+        "telegram":             ["telegram"],
+        "whatsapp":             ["whatsapp"],
+        "discord":              ["discord"],
+        "slack":                ["slack"],
+        "zoom":                 ["zoom"],
+        "skype":                ["skype"],
+        "signal":               ["signal"],
+
+        # Media
+        "spotify":              ["spotify"],
+        "vlc":                  ["vlc media player", "vlc"],
+        "media player":         ["windows media player", "media player"],
+
+        # System
+        "explorer":             ["file explorer", "explorer"],
+        "file explorer":        ["file explorer", "explorer"],
+        "task manager":         ["task manager"],
+        "settings":             ["settings"],
+        "notepad":              ["notepad"],
+        "notepad++":            ["notepad++"],
+        "paint":                ["paint", "mspaint"],
+        "calculator":           ["calculator"],
+
+        # Creative
+        "figma":                ["figma"],
+        "blender":              ["blender"],
+        "photoshop":            ["adobe photoshop", "photoshop"],
+        "illustrator":          ["adobe illustrator", "illustrator"],
+        "premiere":             ["adobe premiere", "premiere pro"],
+        "after effects":        ["adobe after effects", "after effects"],
+
+        # Productivity
+        "notion":               ["notion"],
+        "obsidian":             ["obsidian"],
+    }
+
+    # Process image names for close_app
+    _CLOSE_MAP = {
+        "chrome":           "chrome.exe",
+        "google chrome":    "chrome.exe",
+        "edge":             "msedge.exe",
+        "microsoft edge":   "msedge.exe",
+        "firefox":          "firefox.exe",
+        "opera":            "opera.exe",
+        "brave":            "brave.exe",
+        "word":             "winword.exe",
+        "excel":            "excel.exe",
+        "powerpoint":       "powerpnt.exe",
+        "ppt":              "powerpnt.exe",
+        "outlook":          "outlook.exe",
+        "onenote":          "onenote.exe",
+        "teams":            "teams.exe",
+        "access":           "msaccess.exe",
+        "vscode":           "code.exe",
+        "vs code":          "code.exe",
+        "visual studio code": "code.exe",
+        "terminal":         "wt.exe",
+        "cmd":              "cmd.exe",
+        "powershell":       "powershell.exe",
+        "pycharm":          "pycharm64.exe",
+        "intellij":         "idea64.exe",
+        "android studio":   "studio64.exe",
+        "postman":          "postman.exe",
+        "telegram":         "telegram.exe",
+        "whatsapp":         "whatsapp.exe",
+        "discord":          "discord.exe",
+        "slack":            "slack.exe",
+        "zoom":             "zoom.exe",
+        "skype":            "skype.exe",
+        "signal":           "signal.exe",
+        "spotify":          "spotify.exe",
+        "vlc":              "vlc.exe",
+        "notepad":          "notepad.exe",
+        "notepad++":        "notepad++.exe",
+        "paint":            "mspaint.exe",
+        "calculator":       "calculatorapp.exe",
+        "camera":           "windowscamera.exe",
+        "explorer":         "explorer.exe",
+        "task manager":     "taskmgr.exe",
+        "photoshop":        "photoshop.exe",
+        "illustrator":      "illustrator.exe",
+        "blender":          "blender.exe",
+        "figma":            "figma.exe",
+        "notion":           "notion.exe",
+        "obsidian":         "obsidian.exe",
+    }
+
     def launch_app(self, entities):
         app = (entities.get("app") or "").strip().lower()
         if not app:
             return {"success": False, "response_text": "No app specified"}
         try:
-            app_map = {
-                "calculator": "calc",
-                "calc": "calc",
-                "camera": "microsoft.windows.camera:",
-                "settings": "ms-settings:",
-                "chrome": "chrome",
-                "edge": "msedge",
-                "notepad": "notepad",
-                "terminal": "wt",
-                "cmd": "cmd",
-                "powershell": "powershell",
-                "explorer": "explorer",
-                "task manager": "taskmgr",
-                "vscode": "code",
-                "vs code": "code",
-            }
-            target = app_map.get(app, app)
+            target = self._LAUNCH_MAP.get(app, app)
+            # If the target is an absolute path, check it exists before launching
+            if os.path.isabs(target) and not os.path.exists(target):
+                logger.warning("App path not found: %s", target)
+                return {
+                    "success": False,
+                    "response_text": f"Could not find {app} on this computer. It may not be installed.",
+                }
             subprocess.Popen(f'start "" "{target}"', shell=True)
+            logger.info("Launched: %s -> %s", app, target)
             return {"success": True, "response_text": f"Opening {app}"}
         except Exception as e:
             logger.error("Launch failed: %s", e)
-            return {"success": False, "response_text": "Failed to launch app"}
+            return {"success": False, "response_text": f"Failed to launch {app}"}
+
+    def _window_match_tokens(self, app: str):
+        return self._WINDOW_TOKENS.get(app, [app])
 
     def switch_to_app(self, entities):
         app = (entities.get("app") or "").strip().lower()
@@ -478,6 +626,10 @@ class OSActions:
 
         try:
             import pygetwindow as gw
+            import win32gui
+            import win32con
+            import win32process
+            import ctypes
 
             tokens = self._window_match_tokens(app)
             windows = [w for w in gw.getAllWindows() if getattr(w, "title", "")]
@@ -485,81 +637,89 @@ class OSActions:
             for win in reversed(windows):
                 title = (win.title or "").lower()
                 if any(token in title for token in tokens):
-                    try:
-                        if getattr(win, "isMinimized", False):
-                            win.restore()
-                    except Exception:
-                        pass
-                    try:
-                        win.activate()
-                    except Exception:
-                        pass
-                    return {
-                        "success": True,
-                        "response_text": f"Switched to {app}",
-                    }
+                    hwnd = win._hWnd
 
+                    # Restore if minimized
+                    if win32gui.IsIconic(hwnd):
+                        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+
+                    # Force foreground via AttachThreadInput trick —
+                    # without this, Windows only flashes the taskbar button
+                    foreground_hwnd  = win32gui.GetForegroundWindow()
+                    foreground_tid   = win32process.GetWindowThreadProcessId(foreground_hwnd)[0]
+                    target_tid       = win32process.GetWindowThreadProcessId(hwnd)[0]
+                    current_tid      = ctypes.windll.kernel32.GetCurrentThreadId()
+
+                    attached_fg  = False
+                    attached_tgt = False
+
+                    if foreground_tid and foreground_tid != current_tid:
+                        ctypes.windll.user32.AttachThreadInput(current_tid, foreground_tid, True)
+                        attached_fg = True
+                    if target_tid and target_tid != current_tid:
+                        ctypes.windll.user32.AttachThreadInput(current_tid, target_tid, True)
+                        attached_tgt = True
+
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+                    win32gui.SetForegroundWindow(hwnd)
+                    win32gui.BringWindowToTop(hwnd)
+                    win32gui.SetFocus(hwnd)
+
+                    if attached_fg:
+                        ctypes.windll.user32.AttachThreadInput(current_tid, foreground_tid, False)
+                    if attached_tgt:
+                        ctypes.windll.user32.AttachThreadInput(current_tid, target_tid, False)
+
+                    logger.info("Switched to window: %s", win.title)
+                    return {"success": True, "response_text": f"Switched to {app}"}
+
+            # Window not found — try launching
             launch_result = self.launch_app({"app": app})
             if launch_result.get("success"):
-                return {
-                    "success": True,
-                    "response_text": f"{app} was not open. Opening it now.",
-                }
+                return {"success": True, "response_text": f"{app} was not open. Opening it now."}
 
-            return {"success": False, "response_text": f"Could not switch to {app}"}
+            return {"success": False, "response_text": f"Could not find or open {app}"}
 
         except Exception as e:
             logger.error("Switch app failed: %s", e)
-            return {"success": False, "response_text": "Failed to switch app."}
-
-    def _window_match_tokens(self, app: str):
-        alias_map = {
-            "vscode": ["visual studio code", "vscode", "code"],
-            "vs code": ["visual studio code", "vscode", "code"],
-            "terminal": ["terminal", "windows terminal", "cmd", "powershell"],
-            "cmd": ["command prompt", "cmd"],
-            "explorer": ["file explorer", "explorer"],
-            "task manager": ["task manager"],
-            "edge": ["microsoft edge", "edge"],
-            "chrome": ["google chrome", "chrome"],
-        }
-        return alias_map.get(app, [app])
+            return {"success": False, "response_text": f"Failed to switch to {app}"}
 
     def close_app(self, entities):
         app = (entities.get("app") or "").strip().lower()
         if not app:
             return {"success": False, "response_text": "No app specified"}
         try:
-            # Best-effort: attempt taskkill by image name if provided like "chrome.exe"
-            image_map = {
-                "chrome": "chrome.exe",
-                "edge": "msedge.exe",
-                "calculator": "calculatorapp.exe",
-                "camera": "windowscamera.exe",
-                "notepad": "notepad.exe",
-                "explorer": "explorer.exe",
-                "vscode": "code.exe",
-                "vs code": "code.exe",
-            }
-            image = image_map.get(app, app if app.endswith(".exe") else f"{app}.exe")
-            subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True, text=True, shell=False)
-            return {"success": True, "response_text": f"Closing {app}"}
+            image = self._CLOSE_MAP.get(app, app if app.endswith(".exe") else f"{app}.exe")
+            result = subprocess.run(
+                ["taskkill", "/IM", image, "/F"],
+                capture_output=True, text=True, shell=False
+            )
+            if result.returncode == 0:
+                logger.info("Closed app: %s (%s)", app, image)
+                return {"success": True, "response_text": f"Closed {app}."}
+            else:
+                # taskkill failed — app may not be running
+                logger.warning("taskkill returned %d for %s: %s", result.returncode, image, result.stderr.strip())
+                return {"success": False, "response_text": f"{app} doesn't appear to be running."}
         except Exception as e:
             logger.error("Close failed: %s", e)
-            return {"success": False, "response_text": "Failed to close app"}
+            return {"success": False, "response_text": f"Failed to close {app}"}
 
     def close_all_apps(self):
-        # Dangerous to truly "close everything" via taskkill; do a safe UI-based close loop.
         try:
             import pyautogui
             pyautogui.hotkey("win", "d")
             for _ in range(10):
                 pyautogui.hotkey("alt", "f4")
-                time.sleep(0.1)
+                time.sleep(0.15)
             return {"success": True, "response_text": "Tried closing open apps."}
         except Exception as e:
             logger.error("Close all apps failed: %s", e)
             return {"success": False, "response_text": "Failed to close all apps."}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SYSTEM POWER
+    # ─────────────────────────────────────────────────────────────────────────
 
     def lock(self):
         try:
@@ -593,49 +753,221 @@ class OSActions:
             logger.error("Sleep failed: %s", e)
             return {"success": False, "response_text": "Failed to sleep."}
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # BRIGHTNESS
+    # ─────────────────────────────────────────────────────────────────────────
+
     def brightness(self, action: str, value=None):
         try:
             if action == "set" and value is not None:
                 level = max(0, min(int(value), 100))
+            elif action == "increase":
+                # Read current brightness first, increment by 20
+                level = self._get_brightness()
+                level = min(level + 20, 100) if level is not None else 70
+            elif action == "decrease":
+                level = self._get_brightness()
+                level = max(level - 20, 0) if level is not None else 30
             else:
-                # relative changes; Windows WMI expects absolute 0-100
-                level = 70 if action == "increase" else 30
+                level = 50
+
             ps = (
                 "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods)"
                 f".WmiSetBrightness(1,{level})"
             )
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False)
-            return {"success": True, "response_text": "Brightness updated."}
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True, text=True, check=False
+            )
+            if result.returncode != 0:
+                logger.warning("Brightness PS error: %s", result.stderr.strip())
+                return {"success": False, "response_text": "Could not change brightness. This may not be supported on your display."}
+            return {"success": True, "response_text": f"Brightness set to {level}%."}
         except Exception as e:
             logger.error("Brightness failed: %s", e)
             return {"success": False, "response_text": "Failed to change brightness."}
 
+    def _get_brightness(self):
+        """Returns current brightness level (0-100) or None on failure."""
+        try:
+            ps = "(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightness).CurrentBrightness"
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True, text=True, check=False
+            )
+            return int(result.stdout.strip())
+        except Exception:
+            return None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # FILE / FOLDER NAVIGATION (hierarchical)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def open_path(self, entities):
+        """
+        Open any file or folder path.
+        - If it's a folder  → open in Explorer
+        - If it's a file    → open with its default associated app (os.startfile)
+        - Supports env-var expansion and ~ home dir
+        """
+        raw = (entities.get("path") or entities.get("target") or "").strip()
+        if not raw:
+            return {"success": False, "response_text": "No path specified."}
+
+        path = os.path.expandvars(os.path.expanduser(raw))
+
+        if not os.path.exists(path):
+            # Try to locate the item inside common roots as a fallback
+            found = self._search_path_hierarchy(raw)
+            if found:
+                path = found
+            else:
+                return {
+                    "success": False,
+                    "response_text": f"Could not find '{raw}'. Please check the path.",
+                }
+
+        try:
+            if os.path.isdir(path):
+                subprocess.Popen(f'explorer "{path}"', shell=True)
+                logger.info("Opened folder: %s", path)
+                return {"success": True, "response_text": f"Opening folder: {os.path.basename(path) or path}"}
+            else:
+                os.startfile(path)
+                logger.info("Opened file: %s", path)
+                return {"success": True, "response_text": f"Opening {os.path.basename(path)}"}
+        except Exception as e:
+            logger.error("open_path failed for %s: %s", path, e)
+            return {"success": False, "response_text": f"Failed to open '{os.path.basename(path)}'."}
+
+    def _search_path_hierarchy(self, name: str) -> str:
+        """
+        Walk common root directories to find a file or folder by name.
+        Returns the full path if found, else empty string.
+        """
+        userprofile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+        search_roots = [
+            userprofile,
+            os.path.join(userprofile, "Desktop"),
+            os.path.join(userprofile, "Documents"),
+            os.path.join(userprofile, "Downloads"),
+            os.path.join(userprofile, "Pictures"),
+            os.path.join(userprofile, "Videos"),
+            os.path.join(userprofile, "Music"),
+        ]
+        name_lower = name.lower().replace("\\", os.sep).replace("/", os.sep)
+        for root in search_roots:
+            if not os.path.isdir(root):
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                # Prune hidden and system dirs to keep search fast
+                dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in (
+                    "AppData", "node_modules", "__pycache__", "$Recycle.Bin"
+                )]
+                for item in dirnames + filenames:
+                    if item.lower() == name_lower or os.path.join(dirpath, item).lower().endswith(name_lower):
+                        return os.path.join(dirpath, item)
+        return ""
+
+    def open_explorer(self, entities):
+        """Open File Explorer at a specific drive or path, or at This PC."""
+        drive = (entities.get("drive") or "").strip()
+        path  = (entities.get("path")  or "").strip()
+        target = drive or path
+
+        try:
+            if target:
+                target = os.path.expandvars(os.path.expanduser(target))
+                if not os.path.exists(target):
+                    return {
+                        "success": False,
+                        "response_text": f"Path '{target}' does not exist.",
+                    }
+                subprocess.Popen(f'explorer "{target}"', shell=True)
+                return {"success": True, "response_text": f"Opening {target} in File Explorer."}
+            subprocess.Popen("explorer", shell=True)
+            return {"success": True, "response_text": "Opening File Explorer."}
+        except Exception as e:
+            logger.error("open_explorer failed: %s", e)
+            return {"success": False, "response_text": "Failed to open File Explorer."}
+
+    def open_special_folder(self, entities):
+        """
+        Open common user folders (Downloads, Documents, Desktop, etc.)
+        Supports fuzzy name matching so 'my docs', 'document', 'docs' all resolve.
+        """
+        name = (entities.get("folder_name") or "").strip().lower()
+        userprofile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+
+        special_map = {
+            "downloads":    os.path.join(userprofile, "Downloads"),
+            "download":     os.path.join(userprofile, "Downloads"),
+            "documents":    os.path.join(userprofile, "Documents"),
+            "document":     os.path.join(userprofile, "Documents"),
+            "docs":         os.path.join(userprofile, "Documents"),
+            "my documents": os.path.join(userprofile, "Documents"),
+            "desktop":      os.path.join(userprofile, "Desktop"),
+            "pictures":     os.path.join(userprofile, "Pictures"),
+            "picture":      os.path.join(userprofile, "Pictures"),
+            "photos":       os.path.join(userprofile, "Pictures"),
+            "music":        os.path.join(userprofile, "Music"),
+            "songs":        os.path.join(userprofile, "Music"),
+            "videos":       os.path.join(userprofile, "Videos"),
+            "video":        os.path.join(userprofile, "Videos"),
+            "movies":       os.path.join(userprofile, "Videos"),
+            "appdata":      os.path.join(userprofile, "AppData"),
+            "temp":         os.path.expandvars(r"%TEMP%"),
+            "startup":      os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"),
+        }
+
+        target = special_map.get(name)
+        if not target:
+            # Partial match fallback
+            for key, path in special_map.items():
+                if name in key or key in name:
+                    target = path
+                    break
+
+        if not target:
+            return {"success": False, "response_text": f"I don't know a special folder called '{name}'."}
+
+        if not os.path.isdir(target):
+            return {"success": False, "response_text": f"The {name} folder could not be found on this PC."}
+
+        try:
+            subprocess.Popen(f'explorer "{target}"', shell=True)
+            logger.info("Opened special folder: %s -> %s", name, target)
+            return {"success": True, "response_text": f"Opening your {name} folder."}
+        except Exception as e:
+            logger.error("open_special_folder failed: %s", e)
+            return {"success": False, "response_text": f"Failed to open the {name} folder."}
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # MUSIC
+    # ─────────────────────────────────────────────────────────────────────────
+
     def music_play(self, entities):
-        import pywhatkit
+        try:
+            import pywhatkit
+        except ImportError:
+            return {"success": False, "response_text": "pywhatkit is not installed. Run: pip install pywhatkit"}
+
         platform = (entities.get("platform") or "").strip().lower()
-        name = (entities.get("name") or "").strip()
+        name     = (entities.get("name")     or "").strip()
         if not platform:
             platform = "youtube"
+
         try:
             if platform == "spotify":
                 query = name or "music"
-                # App URI (if desktop app exists). If not, Windows may open web/store.
-                uri = f"spotify:search:{query.replace(' ', '%20')}"
+                uri = f"spotify:search:{urllib.parse.quote(query)}"
                 subprocess.Popen(f'start "" "{uri}"', shell=True)
-                return {"success": True, "response_text": f"Playing {query} on Spotify."}
+                return {"success": True, "response_text": f"Searching {query} on Spotify."}
 
-            # YouTube: open first actual watch URL (more reliable than just results page)
             if not name:
                 subprocess.Popen('start "" "https://music.youtube.com/"', shell=True)
-                return {"success": True, "response_text": "Playing music on YouTube."}
+                return {"success": True, "response_text": "Opening YouTube Music."}
 
-            # video_url = self._youtube_first_video_url(name)
-            # if not video_url:
-            #     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(name)}"
-            #     subprocess.Popen(f'start "" "{url}"', shell=True)
-            #     return {"success": True, "response_text": f"Searching {name} on YouTube."}
-
-            # subprocess.Popen(f'start "" "{video_url}"', shell=True)
             pywhatkit.playonyt(name)
             return {"success": True, "response_text": f"Playing {name} on YouTube."}
         except Exception as e:
@@ -646,12 +978,10 @@ class OSActions:
         try:
             import requests
             from bs4 import BeautifulSoup
-
-            query = urllib.parse.quote(name)
+            query      = urllib.parse.quote(name)
             search_url = f"https://www.youtube.com/results?search_query={query}"
-            response = requests.get(search_url, timeout=10)
-            soup = BeautifulSoup(response.text, "html.parser")
-
+            response   = requests.get(search_url, timeout=10)
+            soup       = BeautifulSoup(response.text, "html.parser")
             for link in soup.find_all("a"):
                 href = link.get("href")
                 if href and href.startswith("/watch"):

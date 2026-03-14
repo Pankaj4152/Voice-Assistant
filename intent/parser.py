@@ -142,6 +142,7 @@ class IntentParser:
             "back":      r"\bgo back\b|\bback\b",
             "forward":   r"\bgo forward\b|\bforward\b",
             "scroll":    r"\bscroll\b",
+            "zoom":      r"\bzoom\b",
             "read_selection": r"\bread selection\b|\bread selected\b",
             "read_page": r"\bread\b.*(page|article|content)\b",
             "download":  r"\bdownload\b",
@@ -188,8 +189,20 @@ class IntentParser:
             e["direction"] = m.group(1)
         if m := re.search(r"(\d+)\s+times?", t):
             e["times"] = int(m.group(1))
+            # Map human "N times" to a scroll amount in pixels
+            e["amount"] = 400 * e["times"]
         if m := re.search(r"\btab\s+(\d{1,2})\b", t):
             e["tab_index"] = int(m.group(1))
+
+        # Zoom percentage, e.g. "zoom to 125 percent" or "zoom 90%"
+        if "zoom" in t:
+            if m := re.search(r"\b(\d{2,3})\s*%?", t):
+                pct = max(25, min(int(m.group(1)), 500))
+                e["zoom_percent"] = pct
+            if re.search(r"\b(in|inward)\b", t):
+                e["zoom_direction"] = "in"
+            elif re.search(r"\b(out|outward)\b", t):
+                e["zoom_direction"] = "out"
 
         return e
 
