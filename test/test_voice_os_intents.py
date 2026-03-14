@@ -98,5 +98,102 @@ class VoiceOSIntentPipelineTests(unittest.TestCase):
         self.assertEqual(parsed.entities.get("action"), "describe_screen")
 
 
+class FileNavIntentExtractionTests(unittest.TestCase):
+    def setUp(self):
+        self.parser = IntentParser()
+
+    def test_list_folder_downloads(self):
+        e = self.parser._os("show files in downloads")
+        self.assertEqual(e.get("action"), "list_folder")
+        self.assertEqual(e.get("folder"), "downloads")
+
+    def test_list_folder_desktop(self):
+        e = self.parser._os("list desktop files")
+        self.assertEqual(e.get("action"), "list_folder")
+        self.assertEqual(e.get("folder"), "desktop")
+
+    def test_list_folder_whats_in(self):
+        e = self.parser._os("what's in documents")
+        self.assertEqual(e.get("action"), "list_folder")
+        self.assertEqual(e.get("folder"), "documents")
+
+    def test_open_folder_downloads(self):
+        e = self.parser._os("open downloads")
+        self.assertEqual(e.get("action"), "open_folder")
+        self.assertEqual(e.get("folder"), "downloads")
+
+    def test_open_folder_navigate(self):
+        e = self.parser._os("navigate to desktop")
+        self.assertEqual(e.get("action"), "open_folder")
+        self.assertEqual(e.get("folder"), "desktop")
+
+    def test_find_file_by_name(self):
+        e = self.parser._os("find report.txt")
+        self.assertEqual(e.get("action"), "find_file")
+        self.assertEqual(e.get("filename"), "report.txt")
+
+    def test_find_file_where_is(self):
+        e = self.parser._os("where is budget.xlsx")
+        self.assertEqual(e.get("action"), "find_file")
+        self.assertEqual(e.get("filename"), "budget.xlsx")
+
+    def test_find_file_with_folder_phrase(self):
+        e = self.parser._os("find report.txt on desktop")
+        self.assertEqual(e.get("action"), "find_file")
+        self.assertEqual(e.get("filename"), "report.txt")
+        self.assertEqual(e.get("folder"), "desktop")
+
+    def test_move_file_to_folder(self):
+        e = self.parser._os("move report.txt to downloads")
+        self.assertEqual(e.get("action"), "move_file")
+        self.assertEqual(e.get("filename"), "report.txt")
+        self.assertEqual(e.get("dest"), "downloads")
+
+    def test_copy_file_to_folder(self):
+        e = self.parser._os("copy budget.xlsx to desktop")
+        self.assertEqual(e.get("action"), "copy_file")
+        self.assertEqual(e.get("filename"), "budget.xlsx")
+        self.assertEqual(e.get("dest"), "desktop")
+
+    def test_rename_file(self):
+        e = self.parser._os("rename report.txt to final.txt")
+        self.assertEqual(e.get("action"), "rename_file")
+        self.assertEqual(e.get("filename"), "report.txt")
+        self.assertEqual(e.get("new_name"), "final.txt")
+
+    def test_delete_file(self):
+        e = self.parser._os("delete report.txt")
+        self.assertEqual(e.get("action"), "delete_file")
+        self.assertEqual(e.get("filename"), "report.txt")
+
+
+class FileNavIntentPipelineTests(unittest.TestCase):
+    def setUp(self):
+        self.parser = IntentParser()
+
+    def test_pipeline_list_folder(self):
+        parsed = self.parser.parse("show files in downloads")
+        self.assertEqual(parsed.intent, "OS")
+        self.assertEqual(parsed.entities.get("action"), "list_folder")
+        self.assertEqual(parsed.entities.get("folder"), "downloads")
+
+    def test_pipeline_find_file(self):
+        parsed = self.parser.parse("find report.txt")
+        self.assertEqual(parsed.intent, "OS")
+        self.assertEqual(parsed.entities.get("action"), "find_file")
+
+    def test_pipeline_move_file(self):
+        parsed = self.parser.parse("move notes.txt to desktop")
+        self.assertEqual(parsed.intent, "OS")
+        self.assertEqual(parsed.entities.get("action"), "move_file")
+        self.assertEqual(parsed.entities.get("filename"), "notes.txt")
+        self.assertEqual(parsed.entities.get("dest"), "desktop")
+
+    def test_pipeline_rename_file(self):
+        parsed = self.parser.parse("rename draft.txt to final.txt")
+        self.assertEqual(parsed.intent, "OS")
+        self.assertEqual(parsed.entities.get("action"), "rename_file")
+
+
 if __name__ == "__main__":
     unittest.main()

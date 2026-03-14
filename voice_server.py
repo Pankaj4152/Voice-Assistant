@@ -407,6 +407,7 @@ class VoiceAssistantServer:
             error_msg = f"Command processing failed: {e}"
             print(f"[ERROR] {error_msg}")
             self.telemetry.log_error("Command", e)
+            speak("Sorry, I could not complete that command.")
             await self.send_error(error_msg)
             await self.send_state("error")
 

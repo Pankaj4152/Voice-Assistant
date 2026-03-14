@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from .voice_timer import TimerActions
 from .general_commands import GeneralCommands
+from .voice_file_nav import FileNavActions
 
 
 class OSActions:
@@ -26,6 +27,7 @@ class OSActions:
     def __init__(self):
         self.timer = TimerActions()
         self.general = GeneralCommands()
+        self.file_nav = FileNavActions()
 
     def handle(self, entities, parsed_intent=None):
         action = entities.get("action")
@@ -51,6 +53,24 @@ class OSActions:
             return self.general.date_time_status()
         if action == "environment_summary":
             return self.general.environment_summary()
+
+        # ── File navigation ───────────────────────────────────────────────
+        if action == "list_folder":
+            return self.file_nav.list_folder(entities)
+        if action == "open_folder":
+            return self.file_nav.open_folder(entities)
+        if action == "go_to_folder":
+            return self.file_nav.go_to_folder(entities)
+        if action == "move_file":
+            return self.file_nav.move_file(entities)
+        if action == "copy_file":
+            return self.file_nav.copy_file(entities)
+        if action == "rename_file":
+            return self.file_nav.rename_file(entities)
+        if action == "find_file":
+            return self.file_nav.find_file(entities)
+        if action == "delete_file":
+            return self.file_nav.delete_file(entities)
 
         if action == "music_play":
             return self.music_play(entities)

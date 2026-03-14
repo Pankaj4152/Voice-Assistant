@@ -15,6 +15,9 @@ class FileActions:
         if action == "create":
             return self.create_file(entities)
 
+        elif action == "write":
+            return self.write_to_active(entities)
+
         elif action == "delete":
             return self.delete_file(entities)
 
@@ -150,4 +153,27 @@ class FileActions:
             return {
                 "success": False,
                 "response_text": str(e)
+            }
+
+    # ─────────────────────────────
+    # WRITE (dictate into active window)
+    # ─────────────────────────────
+
+    def write_to_active(self, entities):
+        content = (entities.get("content") or "").strip()
+        if not content:
+            return {
+                "success": False,
+                "response_text": "Nothing to write. Please say what you want to type."
+            }
+        try:
+            import pyautogui
+            pyautogui.typewrite(content + " ", interval=0.04)
+            logger.info("Typed %d chars into active window", len(content))
+            return {"success": True, "response_text": "Done."}
+        except Exception as e:
+            logger.error("Write to active failed: %s", e)
+            return {
+                "success": False,
+                "response_text": "Could not type that text into the active window."
             }
